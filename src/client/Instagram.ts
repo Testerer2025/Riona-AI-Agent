@@ -45,7 +45,7 @@ async function runInstagram() {
     const page = await browser.newPage();
     const cookiesPath = "/persistent/Instagramcookies.json";
 
-    const checkCookies = await Instagram_cookiesExist(cookiesPath);
+    const checkCookies = await Instagram_cookiesExist();   // nutzt Default‑Pfad
     logger.info(`Checking cookies existence: ${checkCookies}`);
 
     if (checkCookies) {
