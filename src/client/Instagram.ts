@@ -2,13 +2,15 @@ import { Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
-import UserAgent from "user-agents";
 import { Server } from "proxy-chain";
 import { IGpassword, IGusername } from "../secret";
 import logger from "../config/logger";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
 import { runAgent } from "../Agent";
 import { getInstagramCommentSchema } from "../Agent/schema";
+import { postJoke } from "./postJoke";
+
+let jokeLock = false;
 
 // Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
@@ -73,6 +75,21 @@ async function runInstagram() {
     // Navigate to the Instagram homepage
     await page.goto("https://www.instagram.com/");
 
+
+
+    // nach dem Login‑Block, vor der while(true)‑Like‑Schleife
+        setInterval(async () => {
+          if (jokeLock) return;          // schon in Arbeit
+          jokeLock = true;
+          try {
+            await postJoke(page);
+          } catch (e) {
+            logger.error("Post‑Fehler: " + e);
+          } finally {
+            jokeLock = false;
+          }
+        }, 5 * 60 * 1000);
+    
     // Continuously interact with posts without closing the browser
     while (true) {
          await interactWithPosts(page);
