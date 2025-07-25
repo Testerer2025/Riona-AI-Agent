@@ -193,23 +193,22 @@ async function interactWithPosts(page: any) {
                 const comment = result[0]?.comment;
                 await commentBox.type(comment);
 
-                
-           const postButton = await page.evaluateHandle(() => {
+                // New selector approach for the post button
+                const postButton = await page.evaluateHandle(() => {
                     const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
                     return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
                 });
 
                 if (postButton) {
-                    console.log(Posting comment on post ${postIndex}...);
+                    console.log(`Posting comment on post ${postIndex}...`);
                     await postButton.click();
-                    console.log(Comment posted on post ${postIndex}.);
+                    console.log(`Comment posted on post ${postIndex}.`);
                 } else {
                     console.log("Post button not found.");
                 }
             } else {
                 console.log("Comment box not found.");
             }
-
 
 
             // Wait before moving to the next post
