@@ -5,9 +5,9 @@ import logger from "../config/logger";
 
 
 export async function Instagram_cookiesExist(
-cookiesPath: string = "/persistent/Instagramcookies.json"   // <‑‑ Standard‑Pfad
- ): Promise<boolean> {
-    try {
+ cookiesPath: string = "/persistent/Instagramcookies.json"   // Default‑Pfad
+): Promise<boolean> {
+      try {
         await fs.access(cookiesPath); // Check if file exists
 
         const cookiesData = await fs.readFile(cookiesPath, "utf-8");
