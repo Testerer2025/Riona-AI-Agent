@@ -4,52 +4,46 @@ import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
 
 export async function postJoke(page: Page) {
-  /* 1) Witz erzeugen */
   const joke = await generateJoke();
-  if (!joke) {
-    logger.warn("Joke leer – Posting übersprungen");
-    return;
-  }
   logger.info("Neuer Witz: " + joke);
 
-  /* 2) Zur Startseite, Fonts laden, Viewport vergrößern */
-  await page.setViewport({ width: 1280, height: 800 });
+  // 1. Home – wir brauchen die Navigations‑Leiste
   await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
-  await page.evaluate(() => document.fonts.ready);
 
-  /* 3) „Neuer Beitrag“‑Button finden */
-  const newPostSelector =
-    // alte aria‑Labels (EN/DE)
-    'svg[aria-label*="New post"], svg[aria-label*="Create"], svg[aria-label*="Neuer Beitrag"], ' +
-    // Plus‑Icon ohne aria‑Label (2025‑Layout)
-    'svg[width="24"][height="24"] path[d*="M12 5v14"][d*="M5 12h14"]';
+  // 2. Auf das „+“-Icon (Neuer Beitrag) klicken
+  const plusSelector =
+    'svg[aria-label*="New post"], svg[aria-label*="Create"], svg[aria-label*="Neuer Beitrag"]';
+  await page.waitForSelector(plusSelector, { timeout: 10000 });
+  await page.click(plusSelector);
 
-  try {
-    await page.waitForSelector(newPostSelector, { timeout: 60000 });
-    await page.click(newPostSelector);
-  } catch {
-    logger.error("Neuer‑Post‑Button nicht gefunden – Posting übersprungen");
-    return;
+  // 3. Jetzt verstecktes <input type=file> finden
+  //    – steht NICHT im dialog, sondern direkt im DOM:
+  const fileInputSelector = 'input[type="file"][accept*="image"]';
+  await page.waitForSelector(fileInputSelector, { timeout: 10000 });
+
+  const fileInput = await page.$(fileInputSelector);
+  if (!fileInput) throw new Error("Kein Datei‑Input gefunden!");
+
+  const imgPath = path.resolve("assets/brokkoli.jpg");     // dein Bild
+  await fileInput.uploadFile(imgPath);
+
+  // 4. Weiter‑Buttons (2‑mal): „Next“ / „Weiter“
+  for (let i = 0; i < 2; i++) {
+    const nextBtn = 'button:has-text("Next"), button:has-text("Weiter")';
+    await page.waitForSelector(nextBtn, { timeout: 10000 });
+    await page.click(nextBtn);
+    await page.waitForTimeout(1000); // kleine Pause
   }
 
-  /* 4) Bild hochladen */
-  const [chooser] = await Promise.all([
-    page.waitForFileChooser({ timeout: 30000 }),
-    page.click('div[role="dialog"] button, div[role="dialog"] div[role="button"]'),
-  ]);
-  const imgPath = path.resolve("assets/brokkoli.jpg");
-  await chooser.accept([imgPath]);
+  // 5. Bild‑Caption einfügen
+  const captionSel = 'textarea[aria-label*="caption"], textarea[placeholder*="Schreibe"]';
+  await page.waitForSelector(captionSel, { timeout: 10000 });
+  await page.type(captionSel, joke);
 
-  /* 5) Weiter / Next */
-  await page.waitForSelector('button:has-text("Next"), button:has-text("Weiter")', { timeout: 30000 });
-  await page.click('button:has-text("Next"), button:has-text("Weiter")');
+  // 6. Teilen / Share
+  const shareBtn = 'button:has-text("Share"), button:has-text("Teilen")';
+  await page.waitForSelector(shareBtn, { timeout: 10000 });
+  await page.click(shareBtn);
 
-  /* 6) Caption setzen */
-  await page.waitForSelector('textarea[aria-label*="caption"]', { timeout: 30000 });
-  await page.type('textarea[aria-label*="caption"]', joke);
-
-  /* 7) Teilen */
-  await page.click('button:has-text("Share"), button:has-text("Teilen")');
-
-  logger.info("Witz gepostet!");
+  logger.info("Witz gepostet! 🎉");
 }
