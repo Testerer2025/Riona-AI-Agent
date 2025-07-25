@@ -26,9 +26,19 @@ async function runInstagram() {
     await server.listen();
     const proxyUrl = `http://localhost:8000`;
     const browser = await puppeteer.launch({
-        headless: false,
-        args: [`--proxy-server=${proxyUrl}`],
-    });
+    // Pfad kommt aus der Render‑Env‑Var
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+    headless: "new",                        // strikt headless, Chrome > 118
+    args: [
+        `--proxy-server=${proxyUrl}`,       // dein Proxy bleibt erhalten
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-zygote",
+    ],
+});
+
 
     const page = await browser.newPage();
     const cookiesPath = "./cookies/Instagramcookies.json";
