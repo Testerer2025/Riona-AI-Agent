@@ -4,9 +4,10 @@ import { geminiApiKeys } from "../secret";
 import logger from "../config/logger";
 
 
-export async function Instagram_cookiesExist(): Promise<boolean> {
+export async function Instagram_cookiesExist(
+cookiesPath: string = "/persistent/Instagramcookies.json"   // <‑‑ Standard‑Pfad
+ ): Promise<boolean> {
     try {
-        const cookiesPath = "./cookies/Instagramcookies.json";
         await fs.access(cookiesPath); // Check if file exists
 
         const cookiesData = await fs.readFile(cookiesPath, "utf-8");
