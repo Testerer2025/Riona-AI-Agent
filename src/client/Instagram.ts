@@ -43,7 +43,7 @@ async function runInstagram() {
 
 
     const page = await browser.newPage();
-    const cookiesPath = "./cookies/Instagramcookies.json";
+    const cookiesPath = "/persistent/Instagramcookies.json";
 
     const checkCookies = await Instagram_cookiesExist();
     logger.info(`Checking cookies existence: ${checkCookies}`);
