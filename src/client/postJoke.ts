@@ -1,9 +1,9 @@
-import puppeteer from "puppeteer-extra";
+import { Page } from "puppeteer";
 import path from "path";
 import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
 
-export async function postJoke(page: puppeteer.Page) {
+export async function postJoke(page: Page) {
   const joke = await generateJoke();
   logger.info("Neuer Witz: " + joke);
 
