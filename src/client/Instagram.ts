@@ -45,7 +45,7 @@ async function runInstagram() {
     const page = await browser.newPage();
     const cookiesPath = "/persistent/Instagramcookies.json";
 
-    const checkCookies = await Instagram_cookiesExist();
+    const checkCookies = await Instagram_cookiesExist(cookiesPath);
     logger.info(`Checking cookies existence: ${checkCookies}`);
 
     if (checkCookies) {
@@ -119,7 +119,7 @@ const loginWithCredentials = async (page: any, browser: Browser) => {
         // Save cookies after login
         const cookies = await browser.cookies();
         // logger.info("Saving cookies after login...",cookies);
-        await saveCookies("./cookies/Instagramcookies.json", cookies);
+        await saveCookies("/persistent/Instagramcookies.json", cookies);
     } catch (error) {
         // logger.error("Error logging in with credentials:", error);
         logger.error("Error logging in with credentials:");
