@@ -28,7 +28,7 @@ async function runInstagram() {
     const browser = await puppeteer.launch({
     // Pfad kommt aus der Render‑Env‑Var
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-    headless: "new",                        // strikt headless, Chrome > 118
+    headless: true,                        // strikt headless, Chrome > 118
     args: [
         `--proxy-server=${proxyUrl}`,       // dein Proxy bleibt erhalten
         "--no-sandbox",
