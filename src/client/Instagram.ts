@@ -212,7 +212,9 @@ async function interactWithPosts(page: any) {
 
 
             // Wait before moving to the next post
-            const waitTime = Math.floor(Math.random() * 5000) + 5000;
+            const baseDelay = 180_000;                     // 3 min = 180 000 ms
+            const jitter    = Math.floor(Math.random() * 30_000); // 0‑30 s extra
+            const waitTime  = baseDelay + jitter;
             console.log(`Waiting ${waitTime / 1000} seconds before moving to the next post...`);
             await delay(waitTime);
 
