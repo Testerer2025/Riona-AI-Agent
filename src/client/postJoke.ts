@@ -16,7 +16,7 @@ export async function postJoke(page: puppeteer.Page) {
     page.waitForFileChooser(),
     page.click('div[role="dialog"] button, div[role="dialog"] div[role="button"]')
   ]);
-  const imgPath = path.join(process.cwd(), "assets", "brokkoli.jpg");
+  const imgPath = path.resolve("assets/brokkoli.jpg");
   await chooser.accept([imgPath]);
 
   // Weiter
