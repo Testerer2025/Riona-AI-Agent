@@ -58,6 +58,17 @@ export function chooseCharacter(): any {
     if (jsonFiles.length === 0) {
         throw new Error("No character JSON files found");
     }
+    /* ---------- NEU: Vorauswahl per Env ---------- */
+    const envChoice = process.env.AGENT_CHARACTER;          // z. B. "elon.character.json"
+    if (envChoice) {
+        const fileName = jsonFiles.includes(envChoice)
+            ? envChoice
+            : jsonFiles[parseInt(envChoice) - 1];           // erlaubt auch "1", "2", ...
+        if (!fileName) throw new Error("AGENT_CHARACTER not found");
+        const data = fs.readFileSync(path.join(charactersDir, fileName), "utf8");
+        return JSON.parse(data);
+    }
+    /* --------------------------------------------- */
     console.log("Select a character:");
     jsonFiles.forEach((file, index) => {
         console.log(`${index + 1}: ${file}`);
