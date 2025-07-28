@@ -1,4 +1,5 @@
-import puppeteer, { Page, Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
+import { Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
+import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
 import { Server } from "proxy-chain";
@@ -10,42 +11,52 @@ import { getInstagramCommentSchema } from "../Agent/schema";
 import { postJoke } from "./postJoke";
 
 let jokeLock = false;
+
+// Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
 puppeteer.use(
     AdblockerPlugin({
+        // Optionally enable Cooperative Mode for several request interceptors
         interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
     })
 );
 
-const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function runInstagram(): Promise<void> {
+async function runInstagram() {
     const server = new Server({ port: 8000 });
     await server.listen();
     const proxyUrl = `http://localhost:8000`;
     const browser = await puppeteer.launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-        headless: true,
-        args: [
-            `--proxy-server=${proxyUrl}`,
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--no-zygote",
-        ],
-    });
+    // Pfad kommt aus der Render‑Env‑Var
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+    headless: true,                        // strikt headless, Chrome > 118
+    args: [
+        `--proxy-server=${proxyUrl}`,       // dein Proxy bleibt erhalten
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-zygote",
+    ],
+});
+
 
     const page = await browser.newPage();
     const cookiesPath = "/persistent/Instagramcookies.json";
-    const checkCookies = await Instagram_cookiesExist();
+
+    const checkCookies = await Instagram_cookiesExist();   // nutzt Default‑Pfad
     logger.info(`Checking cookies existence: ${checkCookies}`);
 
     if (checkCookies) {
         const cookies = await loadCookies(cookiesPath);
         await page.setCookie(...cookies);
         logger.info('Cookies loaded and set on the page.');
+
+        // Navigate to Instagram to verify if cookies are valid
         await page.goto("https://www.instagram.com/", { waitUntil: 'networkidle2' });
+
+        // Check if login was successful by verifying page content (e.g., user profile or feed)
         const isLoggedIn = await page.$("a[href='/direct/inbox/']");
         if (isLoggedIn) {
             logger.info("Login verified with cookies.");
@@ -54,77 +65,76 @@ async function runInstagram(): Promise<void> {
             await loginWithCredentials(page, browser);
         }
     } else {
+        // If no cookies are available, perform login with credentials
         await loginWithCredentials(page, browser);
     }
 
+    // Optionally take a screenshot after loading the page
     await page.screenshot({ path: "logged_in.png" });
+
+    // Navigate to the Instagram homepage
     await page.goto("https://www.instagram.com/");
 
-    await scheduleNextJoke(page);
 
+
+    // nach dem Login‑Block, vor der while(true)‑Like‑Schleife
+        setInterval(async () => {
+          if (jokeLock) return;          // schon in Arbeit
+          jokeLock = true;
+          try {
+            await postJoke(page);
+          } catch (e) {
+            logger.error("Post‑Fehler: " + e);
+          } finally {
+            jokeLock = false;
+          }
+        }, 5 * 60 * 1000);
+    
+    // Continuously interact with posts without closing the browser
     while (true) {
-        await interactWithPosts(page);
-        const delayMs = Math.floor(Math.random() * (90000 - 30000 + 1)) + 30000;
-        logger.info(`Iteration complete, waiting ${Math.floor(delayMs / 1000)} seconds before refreshing...`);
-        await delay(delayMs);
-        try {
-            await page.reload({ waitUntil: "networkidle2" });
-        } catch (e) {
-            logger.warn("Error reloading page, continuing iteration: " + e);
-        }
+         await interactWithPosts(page);
+         logger.info("Iteration complete, waiting 30 seconds before refreshing...");
+         await delay(30000);
+         try {
+             await page.reload({ waitUntil: "networkidle2" });
+         } catch (e) {
+             logger.warn("Error reloading page, continuing iteration: " + e);
+         }
     }
 }
 
-const loginWithCredentials = async (page: Page, browser: Browser): Promise<void> => {
+const loginWithCredentials = async (page: any, browser: Browser) => {
     try {
         await page.goto("https://www.instagram.com/accounts/login/");
         await page.waitForSelector('input[name="username"]');
-        await page.type('input[name="username"]', IGusername);
-        await page.type('input[name="password"]', IGpassword);
+
+        // Fill out the login form
+        await page.type('input[name="username"]', IGusername); // Replace with your username
+        await page.type('input[name="password"]', IGpassword); // Replace with your password
         await page.click('button[type="submit"]');
+
+        // Wait for navigation after login
         await page.waitForNavigation();
+
+        // Save cookies after login
         const cookies = await browser.cookies();
+        // logger.info("Saving cookies after login...",cookies);
         await saveCookies("/persistent/Instagramcookies.json", cookies);
     } catch (error) {
+        // logger.error("Error logging in with credentials:", error);
         logger.error("Error logging in with credentials:");
     }
 }
 
-async function scheduleNextJoke(page: Page): Promise<void> {
-    const min = 180000;
-    const max = 480000;
-    const delayTime = Math.floor(Math.random() * (max - min + 1)) + min;
+async function interactWithPosts(page: any) {
+    let postIndex = 1; // Start with the first post
+    const maxPosts = 50; // Limit to prevent infinite scrolling
 
-    setTimeout(async () => {
-        if (!isNightTime()) {
-            if (!jokeLock) {
-                jokeLock = true;
-                try {
-                    await postJoke(page);
-                } catch (e) {
-                    logger.error("Post‑Fehler: " + e);
-                } finally {
-                    jokeLock = false;
-                }
-            }
-        } else {
-            logger.info("Nachtpause – keine Posts zwischen 22:00 und 07:00");
-        }
-        scheduleNextJoke(page);
-    }, delayTime);
-}
-
-function isNightTime(): boolean {
-    const hour = new Date().getHours();
-    return hour >= 22 || hour < 7;
-}
-
-async function interactWithPosts(page: Page): Promise<void> {
-    let postIndex = 1;
-    const maxPosts = 50;
     while (postIndex <= maxPosts) {
         try {
             const postSelector = `article:nth-of-type(${postIndex})`;
+
+            // Check if the post exists
             if (!(await page.$(postSelector))) {
                 console.log("No more posts found. Ending iteration...");
                 return;
@@ -132,17 +142,22 @@ async function interactWithPosts(page: Page): Promise<void> {
 
             const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
             const likeButton = await page.$(likeButtonSelector);
-            const ariaLabel = await likeButton?.evaluate((el: Element) => el.getAttribute("aria-label"));
+            const ariaLabel = await likeButton?.evaluate((el: Element) =>
+                el.getAttribute("aria-label")
+            );
 
             if (ariaLabel === "Like") {
                 console.log(`Liking post ${postIndex}...`);
                 await likeButton.click();
                 await page.keyboard.press("Enter");
                 console.log(`Post ${postIndex} liked.`);
+            } else if (ariaLabel === "Unlike") {
+                console.log(`Post ${postIndex} is already liked.`);
             } else {
-                console.log(`Post ${postIndex} is already liked or like button not found.`);
+                console.log(`Like button not found for post ${postIndex}.`);
             }
 
+            // Extract and log the post caption
             const captionSelector = `${postSelector} div.x9f619 span._ap3a div span._ap3a`;
             const captionElement = await page.$(captionSelector);
 
@@ -150,18 +165,35 @@ async function interactWithPosts(page: Page): Promise<void> {
             if (captionElement) {
                 caption = await captionElement.evaluate((el: HTMLElement) => el.innerText);
                 console.log(`Caption for post ${postIndex}: ${caption}`);
+            } else {
+                console.log(`No caption found for post ${postIndex}.`);
             }
 
+            // Check if there is a '...more' link to expand the caption
+            const moreLinkSelector = `${postSelector} div.x9f619 span._ap3a span div span.x1lliihq`;
+            const moreLink = await page.$(moreLinkSelector);
+            if (moreLink) {
+                console.log(`Expanding caption for post ${postIndex}...`);
+                await moreLink.click();
+                const expandedCaption = await captionElement.evaluate(
+                    (el: HTMLElement) => el.innerText
+                );
+                console.log(`Expanded Caption for post ${postIndex}: ${expandedCaption}`);
+                caption = expandedCaption;
+            }
+
+            // Comment on the post
             const commentBoxSelector = `${postSelector} textarea`;
             const commentBox = await page.$(commentBoxSelector);
             if (commentBox) {
                 console.log(`Commenting on post ${postIndex}...`);
-                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: \"${caption}\". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. Keep it under 300 characters.`;
+                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
                 const schema = getInstagramCommentSchema();
                 const result = await runAgent(schema, prompt);
                 const comment = result[0]?.comment;
                 await commentBox.type(comment);
 
+                // New selector approach for the post button
                 const postButton = await page.evaluateHandle(() => {
                     const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
                     return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
@@ -178,12 +210,15 @@ async function interactWithPosts(page: Page): Promise<void> {
                 console.log("Comment box not found.");
             }
 
-            const baseDelay = 180000;
-            const jitter = Math.floor(Math.random() * 30000);
-            const waitTime = baseDelay + jitter;
+
+            // Wait before moving to the next post
+            const baseDelay = 180_000;                     // 3 min = 180 000 ms
+            const jitter    = Math.floor(Math.random() * 30_000); // 0‑30 s extra
+            const waitTime  = baseDelay + jitter;
             console.log(`Waiting ${waitTime / 1000} seconds before moving to the next post...`);
             await delay(waitTime);
 
+            // Scroll to the next post
             await page.evaluate(() => {
                 window.scrollBy(0, window.innerHeight);
             });
