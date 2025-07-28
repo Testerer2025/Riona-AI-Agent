@@ -1,5 +1,4 @@
-import { Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
-import puppeteer from "puppeteer-extra";
+import puppeteer, { Page, Browser, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
 import { Server } from "proxy-chain";
@@ -18,9 +17,9 @@ puppeteer.use(
     })
 );
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-async function runInstagram() {
+async function runInstagram(): Promise<void> {
     const server = new Server({ port: 8000 });
     await server.listen();
     const proxyUrl = `http://localhost:8000`;
@@ -76,7 +75,7 @@ async function runInstagram() {
     }
 }
 
-const loginWithCredentials = async (page, browser) => {
+const loginWithCredentials = async (page: Page, browser: Browser): Promise<void> => {
     try {
         await page.goto("https://www.instagram.com/accounts/login/");
         await page.waitForSelector('input[name="username"]');
@@ -91,7 +90,7 @@ const loginWithCredentials = async (page, browser) => {
     }
 }
 
-async function scheduleNextJoke(page) {
+async function scheduleNextJoke(page: Page): Promise<void> {
     const min = 180000;
     const max = 480000;
     const delayTime = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -115,12 +114,12 @@ async function scheduleNextJoke(page) {
     }, delayTime);
 }
 
-function isNightTime() {
+function isNightTime(): boolean {
     const hour = new Date().getHours();
     return hour >= 22 || hour < 7;
 }
 
-async function interactWithPosts(page) {
+async function interactWithPosts(page: Page): Promise<void> {
     let postIndex = 1;
     const maxPosts = 50;
     while (postIndex <= maxPosts) {
@@ -133,7 +132,7 @@ async function interactWithPosts(page) {
 
             const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
             const likeButton = await page.$(likeButtonSelector);
-            const ariaLabel = await likeButton?.evaluate(el => el.getAttribute("aria-label"));
+            const ariaLabel = await likeButton?.evaluate((el: Element) => el.getAttribute("aria-label"));
 
             if (ariaLabel === "Like") {
                 console.log(`Liking post ${postIndex}...`);
@@ -149,7 +148,7 @@ async function interactWithPosts(page) {
 
             let caption = "";
             if (captionElement) {
-                caption = await captionElement.evaluate(el => el.innerText);
+                caption = await captionElement.evaluate((el: HTMLElement) => el.innerText);
                 console.log(`Caption for post ${postIndex}: ${caption}`);
             }
 
