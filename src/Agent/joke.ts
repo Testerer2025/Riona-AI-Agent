@@ -27,11 +27,13 @@ export async function generateJoke(): Promise<string> {
     
     if (typeof data === "object" && data !== null) {
       // Einzelnes Objekt
-      if (data.instagram_post) return String(data.instagram_post); // NEUES Format!
-      if (data.witz) return String(data.witz);
-      if (data.joke) return String(data.joke);
-      if (data.content) return String(data.content);
-      if (data.post) return String(data.post);
+      if (data.instagram_post) return String(data.instagram_post); // instagram_post
+      if (data.witz) return String(data.witz);                     // witz (klein)
+      if (data.Witz) return String(data.Witz);                     // Witz (groß) - NEU!
+      if (data.joke) return String(data.joke);                     // joke
+      if (data.Joke) return String(data.Joke);                     // Joke (groß) - NEU!
+      if (data.content) return String(data.content);               // content
+      if (data.post) return String(data.post);                     // post
     }
     
     // Fallback - direkter String oder JSON parsen
