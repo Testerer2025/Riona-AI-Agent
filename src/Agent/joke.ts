@@ -15,11 +15,14 @@ export async function generateJoke(): Promise<string> {
     // 2) Erweiterte Datenformat-Erkennung - ALLE möglichen Felder
     if (Array.isArray(data)) {
       // Array mit Objekten
-      if (data[0]?.instagram_post) return data[0].instagram_post; // NEUES Format!
-      if (data[0]?.witz) return data[0].witz;                     // Altes Format
-      if (data[0]?.joke) return data[0].joke;                     // Original Format
-      if (data[0]?.content) return data[0].content;               // Alternative
-      if (data[0]?.post) return data[0].post;                     // Alternative
+      if (data[0]?.instagram_post) return data[0].instagram_post; // Objekt-Format
+      if (data[0]?.witz) return data[0].witz;                     // Objekt-Format
+      if (data[0]?.joke) return data[0].joke;                     // Objekt-Format
+      if (data[0]?.content) return data[0].content;               // Objekt-Format
+      if (data[0]?.post) return data[0].post;                     // Objekt-Format
+      
+      // NEU: Array mit direkten Strings!
+      if (typeof data[0] === "string") return data[0];            // String-Array!
     }
     
     if (typeof data === "object" && data !== null) {
