@@ -9,21 +9,69 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Klickt im aktuell offenen Instagram‑Dialog das erste sichtbare
  *  Button‑Element, dessen Text ODER aria‑label eines der Suchwörter enthält.  */
-async function clickDialogButton(
-  page: Page,
-  candidates: string[],
-  timeout = 20_000
-) {
+/** Klickt WEITER-Buttons (nicht Share!) */
+async function clickNextButton(page: Page, timeout = 20_000) {
   try {
-    logger.info(`Suche nach Button mit Texten: ${candidates.join(', ')}`);
+    logger.info(`Suche nach WEITER-Button...`);
     
-    // Methode 1: Suche nach spezifischem Share-Button (aus deinem HTML)
+    // Nur nach "Weiter/Next" suchen, NICHT nach Share/Teilen!
+    const nextButtonClicked = await page.evaluate(() => {
+      const buttons = document.querySelectorAll('button, div[role="button"]');
+      for (const btn of buttons) {
+        const text = btn.textContent?.trim().toLowerCase();
+        if (text === 'weiter' || text === 'next' || text === 'continue') {
+          (btn as HTMLElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+    
+    if (nextButtonClicked) {
+      logger.info("✅ WEITER-Button gefunden und geklickt");
+      return;
+    }
+    
+    // Fallback
+    const ok = await page.waitForFunction(
+      () => {
+        const dialog = document.querySelector<HTMLElement>('div[role="dialog"]');
+        if (!dialog) return false;
+        const btn = [...dialog.querySelectorAll<HTMLElement>('button,div[role="button"]')]
+          .find(b => {
+            const text = (b.innerText || "").trim().toLowerCase();
+            return (text === 'weiter' || text === 'next' || text === 'continue') && 
+                   !b.hasAttribute("disabled");
+          });
+        if (btn) {
+          (btn as HTMLElement).click();
+          return true;
+        }
+        return false;
+      },
+      { timeout }
+    );
+
+    if (!ok) throw new Error(`WEITER-Button nicht gefunden`);
+    logger.info("✅ WEITER-Button über Fallback gefunden");
+    
+  } catch (error) {
+    logger.error(`Fehler beim Klicken des WEITER-Buttons: ${error}`);
+    throw error;
+  }
+}
+
+/** Klickt SHARE-Button (nur beim finalen Teilen!) */
+async function clickShareButton(page: Page, timeout = 20_000) {
+  try {
+    logger.info(`Suche nach SHARE-Button...`);
+    
+    // Nur nach "Share/Teilen" suchen
     const shareButtonClicked = await page.evaluate(() => {
-      // Suche nach dem spezifischen "Teilen" Button aus deinem HTML
-      const shareButtons = document.querySelectorAll('div[role="button"]');
-      for (const btn of shareButtons) {
-        const text = btn.textContent?.trim();
-        if (text === 'Teilen' || text === 'Share') {
+      const buttons = document.querySelectorAll('button, div[role="button"]');
+      for (const btn of buttons) {
+        const text = btn.textContent?.trim().toLowerCase();
+        if (text === 'teilen' || text === 'share' || text === 'post') {
           (btn as HTMLElement).click();
           return true;
         }
@@ -32,50 +80,14 @@ async function clickDialogButton(
     });
     
     if (shareButtonClicked) {
-      logger.info("✅ Share-Button über spezifische Suche gefunden und geklickt");
+      logger.info("✅ SHARE-Button gefunden und geklickt");
       return;
     }
     
-    // Methode 2: Fallback - ursprüngliche Methode
-    const ok = await page.waitForFunction(
-      (texts) => {
-        const dialog = document.querySelector<HTMLElement>('div[role="dialog"]');
-        if (!dialog) return false;
-        const btn = [...dialog.querySelectorAll<HTMLElement>('button,div[role="button"]')]
-          .find(
-            (b) =>
-              texts.some((t) =>
-                (b.innerText || "").trim().toLowerCase().includes(t) ||
-                (b.getAttribute("aria-label") || "").toLowerCase().includes(t)
-              ) && !b.hasAttribute("disabled")
-          );
-        if (btn) {
-          (btn as HTMLElement).click();
-          return true;
-        }
-        return false;
-      },
-      { timeout },
-      candidates.map((t) => t.toLowerCase())
-    );
-
-    if (!ok) throw new Error(`Button ${candidates.join("/")} nicht gefunden`);
-    logger.info("✅ Share-Button über Fallback-Methode gefunden");
+    throw new Error(`SHARE-Button nicht gefunden`);
     
   } catch (error) {
-    logger.error(`Fehler beim Klicken des Dialog-Buttons: ${error}`);
-    
-    // Debug: Zeige alle verfügbaren Buttons
-    const availableButtons = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button, div[role="button"]');
-      return Array.from(buttons).map(btn => ({
-        text: btn.textContent?.trim(),
-        ariaLabel: btn.getAttribute('aria-label'),
-        disabled: btn.hasAttribute('disabled')
-      })).slice(0, 10); // Nur erste 10 zur Übersicht
-    });
-    
-    logger.info(`Verfügbare Buttons: ${JSON.stringify(availableButtons)}`);
+    logger.error(`Fehler beim Klicken des SHARE-Buttons: ${error}`);
     throw error;
   }
 }
@@ -306,7 +318,7 @@ export async function postJoke(page: Page) {
     try {
       for (let i = 0; i < 2; i++) {
         logger.info(`Klicke Weiter-Button ${i + 1}/2`);
-        await clickDialogButton(page, ["next", "weiter", "continue", "fortfahren"]);
+        await clickNextButton(page); // Verwende die neue Funktion!
         await delay(2000);
       }
     } catch (error) {
@@ -359,7 +371,7 @@ export async function postJoke(page: Page) {
       logger.info(`PRE-SHARE CHECK - Hat Text: ${preShareCheck.hasText}, Länge: ${preShareCheck.textLength}`);
       logger.info(`PRE-SHARE TEXT: "${preShareCheck.textContent}"`);
       
-      await clickDialogButton(page, ["share", "teilen", "post", "veröffentlichen"]);
+      await clickShareButton(page); // Verwende die neue Funktion!
       
       // Warten auf Bestätigung - LÄNGER warten
       logger.info("Warte 15 Sekunden auf Upload-Completion...");
