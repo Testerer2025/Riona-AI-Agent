@@ -258,12 +258,24 @@ export async function postJoke(page: Page) {
     logger.info(`Vollständiger Caption-Text: "${jokeContent}"`); // DEBUG - zeigt ganzen Text
     
     await findAndFillCaption(page, jokeContent);
-    await delay(2000);
-
-    // DEBUG: Screenshot VOR dem Teilen - angepasst für GitHub/Render
-    const screenshotDir = process.env.NODE_ENV === 'production' ? '/persistent' : './debug';
     
-    // Erstelle Debug-Ordner falls nicht vorhanden (für GitHub)
+    // WICHTIG: Länger warten damit Instagram den Text erkennt
+    logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
+    await delay(5000);
+
+    // Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
+    try {
+      await page.click('div[contenteditable="true"][aria-label*="caption"]');
+      logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
+      await delay(1000);
+    } catch (e) {
+      logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
+    }
+
+    // DEBUG: Screenshot VOR dem Teilen - immer in ./debug für GitHub
+    const screenshotDir = './debug';
+    
+    // Erstelle Debug-Ordner falls nicht vorhanden
     if (!fs.existsSync(screenshotDir)) {
       fs.mkdirSync(screenshotDir, { recursive: true });
     }
