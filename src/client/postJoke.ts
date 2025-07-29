@@ -44,18 +44,17 @@ async function clickDialogButton(
   }
 }
 
-// ROBUSTE Caption-Eingabe mit mehreren Methoden
+// LEXICAL EDITOR - Instagram-spezifische Caption-Eingabe
 async function findAndFillCaption(page: Page, content: string): Promise<void> {
   logger.info(`Versuche Caption einzugeben: "${content.substring(0, 100)}..."`);
   
+  // Spezifische Selektoren für Instagram's Lexical Editor
   const captionSelectors = [
+    'div[aria-label="Bildunterschrift verfassen …"][data-lexical-editor="true"]',
+    'div[aria-label*="Bildunterschrift"][contenteditable="true"]',
+    'div[role="textbox"][contenteditable="true"]',
     'div[contenteditable="true"][aria-label*="caption"]',
-    'textarea[aria-label*="caption"]',
-    'textarea[aria-label*="Bildunterschrift"]', 
-    'textarea[placeholder*="Schreibe"]',
-    'textarea[placeholder*="Write a caption"]',
-    'div[contenteditable="true"]',
-    'textarea'
+    'div[contenteditable="true"]'
   ];
 
   let captionFilled = false;
@@ -66,73 +65,86 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
       
       await page.waitForSelector(selector, { timeout: 3000, visible: true });
       
-      // Methode 1: JavaScript-based (wie bei React-Apps nötig)
-      const jsSuccess = await page.evaluate((sel, text) => {
+      // INSTAGRAM LEXICAL EDITOR - Spezielle Behandlung
+      const success = await page.evaluate((sel, text) => {
         const element = document.querySelector(sel) as HTMLElement;
         if (!element) return false;
         
-        // Fokus setzen
+        // 1. Fokus setzen
         element.focus();
         element.click();
         
-        // Text setzen je nach Element-Typ
-        if (element.tagName === 'TEXTAREA') {
-          const textarea = element as HTMLTextAreaElement;
-          textarea.value = text;
-          
-          // React Events triggern
-          const nativeTextAreaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-          if (nativeTextAreaSetter) {
-            nativeTextAreaSetter.call(textarea, text);
-          }
-        } else if (element.contentEditable === 'true') {
-          element.innerText = text;
-        }
+        // 2. Lexical Editor: Lösche <p><br></p> und ersetze mit Text
+        element.innerHTML = `<p>${text}</p>`;
         
-        // Events feuern
-        element.dispatchEvent(new Event('focus', { bubbles: true }));
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.dispatchEvent(new Event('blur', { bubbles: true }));
+        // 3. Für Lexical Editor: Setze auch innerText
+        element.innerText = text;
+        
+        // 4. Alle wichtigen Events für React/Lexical
+        const events = [
+          new Event('focus', { bubbles: true }),
+          new Event('input', { bubbles: true, composed: true }),
+          new Event('change', { bubbles: true }),
+          new InputEvent('input', { data: text, bubbles: true, composed: true }),
+          new Event('blur', { bubbles: true })
+        ];
+        
+        events.forEach(event => element.dispatchEvent(event));
+        
+        // 5. Spezial für Lexical Editor: Custom Events
+        try {
+          element.dispatchEvent(new CustomEvent('lexical-input', { 
+            detail: { text }, 
+            bubbles: true 
+          }));
+        } catch (e) {
+          // Custom Event nicht unterstützt, ignorieren
+        }
         
         return true;
       }, selector, content);
       
-      if (jsSuccess) {
-        logger.info(`JavaScript-Methode erfolgreich für: ${selector}`);
+      if (success) {
+        logger.info(`Lexical Editor Methode erfolgreich für: ${selector}`);
         
-        // Zusätzlich: Puppeteer type() als Backup
+        // Zusätzliche Sicherheit: Keyboard-Eingabe
         try {
-          const captionElement = await page.$(selector);
-          if (captionElement) {
-            await captionElement.focus();
-            await page.keyboard.down('Control');
-            await page.keyboard.press('KeyA');
-            await page.keyboard.up('Control');
-            await delay(300);
-            await captionElement.type(content, { delay: 50 });
-            logger.info("Zusätzlich: Puppeteer type() ausgeführt");
+          await page.click(selector);
+          await delay(500);
+          
+          // Select all und überschreiben
+          await page.keyboard.down('Control');
+          await page.keyboard.press('KeyA');
+          await page.keyboard.up('Control');
+          await delay(200);
+          
+          // Zeichen für Zeichen eingeben (langsamer aber sicherer)
+          for (const char of content) {
+            await page.keyboard.type(char, { delay: 10 });
           }
+          
+          logger.info("Zusätzlich: Zeichen-für-Zeichen Eingabe abgeschlossen");
         } catch (e) {
-          logger.warn("Puppeteer type() fehlgeschlagen, aber JavaScript-Methode sollte funktioniert haben");
+          logger.warn("Backup Keyboard-Eingabe fehlgeschlagen");
         }
         
         captionFilled = true;
         
-        // Prüfe was wirklich im Feld steht
-        await delay(500);
-        const actualText = await page.evaluate((sel) => {
+        // Debug: Was steht wirklich im Feld?
+        await delay(1000);
+        const finalCheck = await page.evaluate((sel) => {
           const el = document.querySelector(sel) as HTMLElement;
           if (!el) return "ELEMENT_NOT_FOUND";
-          if (el.tagName === 'TEXTAREA') {
-            return (el as HTMLTextAreaElement).value;
-          } else if ((el as HTMLElement).contentEditable === 'true') {
-            return (el as HTMLElement).innerText;
-          }
-          return "UNKNOWN_TYPE";
+          
+          return {
+            innerHTML: el.innerHTML,
+            innerText: el.innerText,
+            textContent: el.textContent
+          };
         }, selector);
         
-        logger.info(`FINAL: Text im Feld: "${actualText}"`);
+        logger.info(`FINAL CHECK - innerHTML: "${finalCheck.innerHTML}"`);
+        logger.info(`FINAL CHECK - innerText: "${finalCheck.innerText}"`);
         break;
       }
       
