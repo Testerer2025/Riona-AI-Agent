@@ -44,6 +44,66 @@ async function clickDialogButton(
   }
 }
 
+// DEBUG-Version der Caption-Eingabe
+async function findAndFillCaption(page: Page, content: string): Promise<void> {
+  logger.info(`Versuche Caption einzugeben: "${content.substring(0, 100)}..."`);
+  
+  const captionSelectors = [
+    'div[contenteditable="true"][aria-label*="caption"]',
+    'textarea[aria-label*="caption"]',
+    'textarea[aria-label*="Bildunterschrift"]', 
+    'textarea[placeholder*="Schreibe"]',
+    'textarea[placeholder*="Write a caption"]',
+    'div[contenteditable="true"]',
+    'textarea'
+  ];
+
+  let captionFilled = false;
+
+  for (const selector of captionSelectors) {
+    try {
+      logger.info(`Versuche Caption-Selektor: ${selector}`);
+      
+      await page.waitForSelector(selector, { timeout: 3000, visible: true });
+      
+      // Hole das Element (wie beim Kommentieren)
+      const captionElement = await page.$(selector);
+      if (captionElement) {
+        
+        // Methode 1: Einfach wie beim Kommentieren
+        logger.info("Verwende element.type() Methode...");
+        await captionElement.type(content);
+        
+        captionFilled = true;
+        logger.info(`Caption eingegeben mit Selektor: ${selector}`);
+        
+        // Zusätzlich: Prüfe ob der Text wirklich da ist
+        const actualText = await page.evaluate((sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return "ELEMENT_NOT_FOUND";
+          if (el.tagName === 'TEXTAREA') {
+            return (el as HTMLTextAreaElement).value;
+          } else if (el.contentEditable === 'true') {
+            return (el as HTMLElement).innerText;
+          }
+          return "UNKNOWN_TYPE";
+        }, selector);
+        
+        logger.info(`Text im Feld nach Eingabe: "${actualText.substring(0, 50)}..."`);
+        break;
+      }
+      
+    } catch (error) {
+      logger.debug(`Selektor ${selector} nicht gefunden`);
+      continue;
+    }
+  }
+
+  if (!captionFilled) {
+    throw new Error("Caption-Feld konnte nicht gefunden werden");
+  }
+}
+
 // Erstelle ein einfaches Placeholder-Bild falls keins existiert
 async function ensureImageExists(): Promise<string> {
   const imagePath = path.resolve("assets/brokkoli.jpg");
@@ -76,7 +136,7 @@ export async function postJoke(page: Page) {
 
     /* ░░ 0) Witz holen ░░ */
     const joke = await generateJoke();
-    logger.info(`Neuer Post-Content generiert: ${joke.substring(0, 50)}...`);
+    logger.info(`Neuer Witz generiert: ${JSON.stringify(joke)}`);
 
     /* ░░ 0.1) Stelle sicher dass ein Bild existiert ░░ */
     const imagePath = await ensureImageExists();
@@ -116,24 +176,7 @@ export async function postJoke(page: Page) {
 
     } catch (error) {
       logger.error("Plus-Icon nicht gefunden, versuche Alternative...");
-      
-      // Alternative: Navigation Menu
-      try {
-        await page.evaluate(() => {
-          const links = Array.from(document.querySelectorAll('a'));
-          const createLink = links.find(link => 
-            link.getAttribute('aria-label')?.includes('Create') ||
-            link.getAttribute('aria-label')?.includes('New post')
-          );
-          if (createLink) {
-            (createLink as HTMLElement).click();
-            return true;
-          }
-          return false;
-        });
-      } catch (e) {
-        throw new Error("Konnte Create-Button nicht finden");
-      }
+      throw error;
     }
 
     await delay(2000);
@@ -166,40 +209,18 @@ export async function postJoke(page: Page) {
       throw error;
     }
 
-    /* ░░ 5) Caption eingeben ░░ */
-    try {
-      const captionSelectors = [
-        'textarea[aria-label*="caption"]',
-        'textarea[aria-label*="Bildunterschrift"]',
-        'textarea[placeholder*="Schreibe"]',
-        'div[contenteditable="true"]' // Fallback
-      ];
-
-      let captionFound = false;
-      for (const selector of captionSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000, visible: true });
-          await page.click(selector); // Fokus setzen
-          await delay(500);
-          await page.type(selector, joke, { delay: 50 }); // Langsamer tippen
-          captionFound = true;
-          logger.info("Caption erfolgreich eingegeben");
-          break;
-        } catch (e) {
-          continue;
-        }
-      }
-
-      if (!captionFound) {
-        throw new Error("Caption-Feld nicht gefunden");
-      }
-
-    } catch (error) {
-      logger.error("Fehler bei Caption-Eingabe:", error);
-      throw error;
-    }
-
+    /* ░░ 5) Caption - VOLLSTÄNDIGES DEBUG ░░ */
+    logger.info("Beginne Caption-Eingabe...");
+    const jokeContent = Array.isArray(joke) ? joke[0]?.witz ?? "" : (joke as string);
+    logger.info(`Vollständiger Caption-Text: "${jokeContent}"`); // DEBUG - zeigt ganzen Text
+    
+    await findAndFillCaption(page, jokeContent);
     await delay(2000);
+
+    // DEBUG: Screenshot VOR dem Teilen
+    const screenshotPath = `caption_debug_${Date.now()}.png`;
+    await page.screenshot({ path: screenshotPath });
+    logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);
 
     /* ░░ 6) „Teilen/Share" ░░ */
     try {
@@ -228,8 +249,9 @@ export async function postJoke(page: Page) {
     
     // Screenshot für Debugging
     try {
-      await page.screenshot({ path: `debug_post_error_${Date.now()}.png` });
-      logger.info("Debug-Screenshot gespeichert");
+      const errorScreenshot = `debug_post_error_${Date.now()}.png`;
+      await page.screenshot({ path: errorScreenshot });
+      logger.info(`Error-Screenshot gespeichert: ${errorScreenshot}`);
     } catch (e) {
       // Screenshot fehlgeschlagen, ignorieren
     }
