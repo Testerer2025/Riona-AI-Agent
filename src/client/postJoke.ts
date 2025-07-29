@@ -101,12 +101,11 @@ async function clickShareButton(page: Page): Promise<void> {
 
   /* 3. Bestätigung: Dialog verschwindet oder Feed lädt neu */
 await page.waitForFunction(
-   () => {
-     const dlg = document.querySelector('div[role="dialog"]') as HTMLElement | null;
-     return !dlg || dlg.style.display === 'none' || dlg.getAttribute('aria-hidden') === 'true';
-   },
-   { timeout: 60_000 }
- );
+  () => location.pathname === '/'                              // zurück im Feed
+     || !!document.querySelector('[data-testid="upload-flow-success-toast"]'),
+  { timeout: 60_000 }
+);
+
 }
 
 
