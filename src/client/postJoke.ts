@@ -79,11 +79,11 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
         
         // Zusätzlich: Prüfe ob der Text wirklich da ist
         const actualText = await page.evaluate((sel) => {
-          const el = document.querySelector(sel);
+          const el = document.querySelector(sel) as HTMLElement;
           if (!el) return "ELEMENT_NOT_FOUND";
           if (el.tagName === 'TEXTAREA') {
             return (el as HTMLTextAreaElement).value;
-          } else if (el.contentEditable === 'true') {
+          } else if ((el as HTMLElement).contentEditable === 'true') {
             return (el as HTMLElement).innerText;
           }
           return "UNKNOWN_TYPE";
