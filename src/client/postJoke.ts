@@ -107,7 +107,7 @@ await page.waitForFunction(
    },
    { timeout: 60_000 }
  );
-
+}
 
 
 
