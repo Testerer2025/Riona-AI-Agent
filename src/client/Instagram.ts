@@ -88,7 +88,7 @@ async function runInstagram() {
           } finally {
             jokeLock = false;
           }
-        }, 5 * 60 * 1000);
+        }, 50 * 60 * 1000);
     
     // Continuously interact with posts without closing the browser
     while (true) {
