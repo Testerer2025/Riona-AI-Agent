@@ -100,13 +100,13 @@ async function clickShareButton(page: Page): Promise<void> {
   logger.info("✅ Share‑Button geklickt, warte auf Dialog‑Verschwinden…");
 
   /* 3. Bestätigung: Dialog verschwindet oder Feed lädt neu */
-  await Promise.race([
-    page.waitForFunction(() => !document.querySelector('div[role="dialog"]'), { timeout: 60_000 }),
-    page.waitForNavigation({ timeout: 60_000, waitUntil: "networkidle2" }),
-  ]);
-
-  logger.info("✅ Post veröffentlicht (Dialog weg oder Navigation)");
-}
+await page.waitForFunction(
+   () => {
+     const dlg = document.querySelector('div[role="dialog"]') as HTMLElement | null;
+     return !dlg || dlg.style.display === 'none' || dlg.getAttribute('aria-hidden') === 'true';
+   },
+   { timeout: 60_000 }
+ );
 
 
 
