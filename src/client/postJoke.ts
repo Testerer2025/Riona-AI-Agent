@@ -62,7 +62,7 @@ async function clickNextButton(page: Page, timeout = 20_000) {
 }
 
 /** Klickt SHARE-Button (nur beim finalen Teilen!) */
-async function clickShareButton(page: Page, timeout = 20_000) {
+async function clickShareButton(page: Page) {
   try {
     logger.info(`Suche nach SHARE-Button...`);
     
