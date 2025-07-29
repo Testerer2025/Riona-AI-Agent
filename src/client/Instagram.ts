@@ -110,7 +110,7 @@ async function runInstagram() {
 
 
     // Warte 50 Minuten bevor Kommentieren/Liken startet
-        logger.info("Warte 50 Minuten bevor Like/Comment-Aktivität startet...");
+     /*   logger.info("Warte 50 Minuten bevor Like/Comment-Aktivität startet...");
         await delay(50 * 60 * 1000); // 50 Minuten warten
         logger.info("Starte jetzt Like/Comment-Aktivität...");
         
@@ -124,7 +124,29 @@ async function runInstagram() {
              } catch (e) {
                  logger.warn("Error reloading page, continuing iteration: " + e);
              }
-        }
+        } */
+
+    while (true) {
+
+  // Wenn gerade ein Post läuft, kurz warten und eine Runde überspringen
+  if (jokeLock) {
+    logger.info("Posting läuft – warte 30 s …");
+    await delay(30_000);
+    continue;
+  }
+
+  // Likes & Kommentare
+  await interactWithPosts(page);
+
+  logger.info("Iteration complete, waiting 30 seconds before refreshing …");
+  await delay(30_000);
+
+  try {
+    await page.reload({ waitUntil: "networkidle2" });
+  } catch (e) {
+    logger.warn("Error reloading page, continuing iteration: " + e);
+  }
+}
 
     // 
     
