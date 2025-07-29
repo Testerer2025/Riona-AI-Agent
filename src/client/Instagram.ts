@@ -149,7 +149,7 @@ async function interactWithPosts(page: any) {
             if (ariaLabel === "Like") {
                 console.log(`Liking post ${postIndex}...`);
                 await likeButton.click();
-                await page.keyboard.press("Enter");
+                // await page.keyboard.press("Enter");
                 console.log(`Post ${postIndex} liked.`);
             } else if (ariaLabel === "Unlike") {
                 console.log(`Post ${postIndex} is already liked.`);
