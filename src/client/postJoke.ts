@@ -15,6 +15,28 @@ async function clickDialogButton(
   timeout = 20_000
 ) {
   try {
+    logger.info(`Suche nach Button mit Texten: ${candidates.join(', ')}`);
+    
+    // Methode 1: Suche nach spezifischem Share-Button (aus deinem HTML)
+    const shareButtonClicked = await page.evaluate(() => {
+      // Suche nach dem spezifischen "Teilen" Button aus deinem HTML
+      const shareButtons = document.querySelectorAll('div[role="button"]');
+      for (const btn of shareButtons) {
+        const text = btn.textContent?.trim();
+        if (text === 'Teilen' || text === 'Share') {
+          (btn as HTMLElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+    
+    if (shareButtonClicked) {
+      logger.info("✅ Share-Button über spezifische Suche gefunden und geklickt");
+      return;
+    }
+    
+    // Methode 2: Fallback - ursprüngliche Methode
     const ok = await page.waitForFunction(
       (texts) => {
         const dialog = document.querySelector<HTMLElement>('div[role="dialog"]');
@@ -38,22 +60,59 @@ async function clickDialogButton(
     );
 
     if (!ok) throw new Error(`Button ${candidates.join("/")} nicht gefunden`);
+    logger.info("✅ Share-Button über Fallback-Methode gefunden");
+    
   } catch (error) {
     logger.error(`Fehler beim Klicken des Dialog-Buttons: ${error}`);
+    
+    // Debug: Zeige alle verfügbaren Buttons
+    const availableButtons = await page.evaluate(() => {
+      const buttons = document.querySelectorAll('button, div[role="button"]');
+      return Array.from(buttons).map(btn => ({
+        text: btn.textContent?.trim(),
+        ariaLabel: btn.getAttribute('aria-label'),
+        disabled: btn.hasAttribute('disabled')
+      })).slice(0, 10); // Nur erste 10 zur Übersicht
+    });
+    
+    logger.info(`Verfügbare Buttons: ${JSON.stringify(availableButtons)}`);
     throw error;
   }
 }
 
-// LEXICAL EDITOR - Instagram-spezifische Caption-Eingabe
+// GENAUER Debug: Zeige alle möglichen Caption-Felder
 async function findAndFillCaption(page: Page, content: string): Promise<void> {
   logger.info(`Versuche Caption einzugeben: "${content.substring(0, 100)}..."`);
+  
+  // Erst mal: Zeige ALLE möglichen Caption-Felder
+  const allCaptionFields = await page.evaluate(() => {
+    const fields = [
+      ...document.querySelectorAll('div[contenteditable="true"]'),
+      ...document.querySelectorAll('textarea'),
+      ...document.querySelectorAll('div[role="textbox"]')
+    ];
+    
+    return fields.map((field, index) => ({
+      index,
+      tagName: field.tagName,
+      ariaLabel: field.getAttribute('aria-label'),
+      placeholder: field.getAttribute('placeholder'),
+      textContent: field.textContent?.substring(0, 50),
+      classes: field.className.substring(0, 100),
+      isVisible: (field as HTMLElement).offsetParent !== null,
+      hasDataLexical: field.hasAttribute('data-lexical-editor')
+    }));
+  });
+  
+  logger.info(`ALLE GEFUNDENEN FELDER: ${JSON.stringify(allCaptionFields, null, 2)}`);
   
   // Spezifische Selektoren für Instagram's Lexical Editor
   const captionSelectors = [
     'div[aria-label="Bildunterschrift verfassen …"][data-lexical-editor="true"]',
+    'div[aria-label*="Bildunterschrift"][contenteditable="true"][data-lexical-editor="true"]',
+    'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
     'div[aria-label*="Bildunterschrift"][contenteditable="true"]',
     'div[role="textbox"][contenteditable="true"]',
-    'div[contenteditable="true"][aria-label*="caption"]',
     'div[contenteditable="true"]'
   ];
 
@@ -65,7 +124,31 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
       
       await page.waitForSelector(selector, { timeout: 3000, visible: true });
       
-      // INSTAGRAM LEXICAL EDITOR - Spezielle Behandlung
+      // Prüfe welches Element genau gefunden wurde
+      const elementInfo = await page.evaluate((sel) => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (!el) return null;
+        
+        return {
+          ariaLabel: el.getAttribute('aria-label'),
+          textContent: el.textContent,
+          innerHTML: el.innerHTML.substring(0, 200),
+          hasDataLexical: el.hasAttribute('data-lexical-editor'),
+          isVisible: el.offsetParent !== null,
+          boundingRect: el.getBoundingClientRect()
+        };
+      }, selector);
+      
+      logger.info(`GEFUNDEN: ${JSON.stringify(elementInfo)}`);
+      
+      // Nur fortfahren wenn es das richtige Feld ist
+      if (!elementInfo?.ariaLabel?.includes('Bildunterschrift') && 
+          !elementInfo?.ariaLabel?.includes('caption')) {
+        logger.warn(`ÜBERSPRINGE - Nicht das Caption-Feld: ${elementInfo?.ariaLabel}`);
+        continue;
+      }
+      
+      // Instagram Lexical Editor - NUR JavaScript, KEIN Puppeteer
       const success = await page.evaluate((sel, text) => {
         const element = document.querySelector(sel) as HTMLElement;
         if (!element) return false;
@@ -74,13 +157,11 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
         element.focus();
         element.click();
         
-        // 2. Lexical Editor: Lösche <p><br></p> und ersetze mit Text
-        element.innerHTML = `<p>${text}</p>`;
-        
-        // 3. Für Lexical Editor: Setze auch innerText
+        // 2. Lexical Editor: Setze innerHTML UND innerText
+        element.innerHTML = `<p class="xdj266r x14z9mp xat24cr x1lziwak" dir="ltr"><span data-lexical-text="true">${text}</span></p>`;
         element.innerText = text;
         
-        // 4. Alle wichtigen Events für React/Lexical
+        // 3. Alle Events für React/Lexical
         const events = [
           new Event('focus', { bubbles: true }),
           new Event('input', { bubbles: true, composed: true }),
@@ -91,46 +172,14 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
         
         events.forEach(event => element.dispatchEvent(event));
         
-        // 5. Spezial für Lexical Editor: Custom Events
-        try {
-          element.dispatchEvent(new CustomEvent('lexical-input', { 
-            detail: { text }, 
-            bubbles: true 
-          }));
-        } catch (e) {
-          // Custom Event nicht unterstützt, ignorieren
-        }
-        
         return true;
       }, selector, content);
       
       if (success) {
-        logger.info(`Lexical Editor Methode erfolgreich für: ${selector}`);
-        
-        // Zusätzliche Sicherheit: Keyboard-Eingabe
-        try {
-          await page.click(selector);
-          await delay(500);
-          
-          // Select all und überschreiben
-          await page.keyboard.down('Control');
-          await page.keyboard.press('KeyA');
-          await page.keyboard.up('Control');
-          await delay(200);
-          
-          // Zeichen für Zeichen eingeben (langsamer aber sicherer)
-          for (const char of content) {
-            await page.keyboard.type(char, { delay: 10 });
-          }
-          
-          logger.info("Zusätzlich: Zeichen-für-Zeichen Eingabe abgeschlossen");
-        } catch (e) {
-          logger.warn("Backup Keyboard-Eingabe fehlgeschlagen");
-        }
-        
+        logger.info(`✅ Caption eingegeben in das RICHTIGE Feld: ${selector}`);
         captionFilled = true;
         
-        // Debug: Was steht wirklich im Feld?
+        // Debug: Was steht nach der Eingabe wirklich im Feld?
         await delay(1000);
         const finalCheck = await page.evaluate((sel) => {
           const el = document.querySelector(sel) as HTMLElement;
@@ -312,8 +361,9 @@ export async function postJoke(page: Page) {
       
       await clickDialogButton(page, ["share", "teilen", "post", "veröffentlichen"]);
       
-      // Warten auf Bestätigung
-      await delay(5000);
+      // Warten auf Bestätigung - LÄNGER warten
+      logger.info("Warte 15 Sekunden auf Upload-Completion...");
+      await delay(15000); // Länger warten für Upload
       
       // DEBUG: Nach dem Share - prüfe ob Dialog verschwunden oder Fehler aufgetreten
       const postShareStatus = await page.evaluate(() => {
