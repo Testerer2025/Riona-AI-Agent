@@ -78,7 +78,7 @@ async function runInstagram() {
 
 
     // nach dem Login‑Block, vor der while(true)‑Like‑Schleife
-        setInterval(async () => {
+       /* setInterval(async () => {
           if (jokeLock) return;          // schon in Arbeit
           jokeLock = true;
           try {
@@ -88,7 +88,38 @@ async function runInstagram() {
           } finally {
             jokeLock = false;
           }
-        }, 50 * 60 * 1000);
+        }, 50 * 60 * 1000);*/
+
+    // Erster Post nach 50 Minuten
+setTimeout(async () => {
+  if (!jokeLock) {
+    jokeLock = true;
+    try {
+      await postJoke(page);
+    } catch (e) {
+      logger.error("Post‑Fehler: " + e);
+    } finally {
+      jokeLock = false;
+    }
+  }
+}, 50 * 60 * 1000); // 50 Minuten für ersten Post
+
+// Dann alle 50 Minuten wiederholen
+setInterval(async () => {
+  if (jokeLock) return;
+  jokeLock = true;
+  try {
+    await postJoke(page);
+  } catch (e) {
+    logger.error("Post‑Fehler: " + e);
+  } finally {
+    jokeLock = false;
+  }
+}, 50 * 60 * 1000);
+
+
+
+    
     
     // Continuously interact with posts without closing the browser
     while (true) {
