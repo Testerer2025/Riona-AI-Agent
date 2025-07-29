@@ -66,33 +66,25 @@ async function clickShareButton(page: Page) {
   try {
     logger.info(`Suche nach SHARE-Button...`);
     
-    // Suche nach dem richtigen "Share" im Post-Dialog (nicht external share)
+    // Einfach: Klicke den ersten "Share" Button den wir finden
     const shareButtonClicked = await page.evaluate(() => {
       const buttons = document.querySelectorAll('button, div[role="button"]');
       for (const btn of buttons) {
         const text = btn.textContent?.trim();
-        const parent = btn.closest('div[role="dialog"]');
-        
-        // Nur der Share-Button im ERSTEN Dialog (Post-Dialog)
-        if ((text === 'Share' || text === 'Teilen') && parent) {
-          // Prüfe ob es der Post-Dialog ist (enthält Caption-Text)
-          const dialogText = parent.textContent || '';
-          if (dialogText.includes('caption') || dialogText.includes('Bildunterschrift') || 
-              dialogText.length > 500) { // Post-Dialog ist länger
-            (btn as HTMLElement).click();
-            return true;
-          }
+        if (text === 'Share' || text === 'Teilen') {
+          (btn as HTMLElement).click();
+          return true;
         }
       }
       return false;
     });
     
     if (shareButtonClicked) {
-      logger.info("✅ RICHTIGER SHARE-Button gefunden und geklickt");
+      logger.info("✅ SHARE-Button gefunden und geklickt");
       return;
     }
     
-    // Fallback: Suche nach "Post" Button
+    // Fallback: Suche nach "Post" Button  
     const postButtonClicked = await page.evaluate(() => {
       const buttons = document.querySelectorAll('button, div[role="button"]');
       for (const btn of buttons) {
@@ -115,20 +107,13 @@ async function clickShareButton(page: Page) {
   } catch (error) {
     logger.error(`Fehler beim Klicken des SHARE-Buttons: ${error}`);
     
-    // Debug: Zeige alle verfügbaren Buttons in allen Dialogen
+    // Debug: Zeige alle verfügbaren Buttons
     const availableButtons = await page.evaluate(() => {
-      const dialogs = document.querySelectorAll('div[role="dialog"]');
-      return Array.from(dialogs).map((dialog, index) => ({
-        dialogIndex: index,
-        dialogText: dialog.textContent?.substring(0, 200),
-        buttons: Array.from(dialog.querySelectorAll('button, div[role="button"]')).map(btn => ({
-          text: btn.textContent?.trim(),
-          ariaLabel: btn.getAttribute('aria-label')
-        }))
-      }));
+      const buttons = document.querySelectorAll('button, div[role="button"]');
+      return Array.from(buttons).map(btn => btn.textContent?.trim()).filter(text => text && text.length > 0);
     });
     
-    logger.info(`Verfügbare Dialoge und Buttons: ${JSON.stringify(availableButtons, null, 2)}`);
+    logger.info(`Alle verfügbaren Button-Texte: ${JSON.stringify(availableButtons)}`);
     throw error;
   }
 }
