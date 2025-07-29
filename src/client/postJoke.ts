@@ -134,12 +134,13 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
         await delay(1000);
         const finalCheck = await page.evaluate((sel) => {
           const el = document.querySelector(sel) as HTMLElement;
-          if (!el) return "ELEMENT_NOT_FOUND";
+          if (!el) return { status: "ELEMENT_NOT_FOUND", innerHTML: "", innerText: "", textContent: "" };
           
           return {
+            status: "SUCCESS",
             innerHTML: el.innerHTML,
             innerText: el.innerText,
-            textContent: el.textContent
+            textContent: el.textContent || ""
           };
         }, selector);
         
@@ -284,15 +285,8 @@ export async function postJoke(page: Page) {
       logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
     }
 
-    // DEBUG: Screenshot VOR dem Teilen - immer in ./debug für GitHub
-    const screenshotDir = './debug';
-    
-    // Erstelle Debug-Ordner falls nicht vorhanden
-    if (!fs.existsSync(screenshotDir)) {
-      fs.mkdirSync(screenshotDir, { recursive: true });
-    }
-    
-    const screenshotPath = `${screenshotDir}/caption_debug_${Date.now()}.png`;
+    // DEBUG: Screenshot - einfach ins Hauptverzeichnis
+    const screenshotPath = `debug_${Date.now()}.png`;
     await page.screenshot({ path: screenshotPath });
     logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);
 
