@@ -88,7 +88,7 @@ async function runInstagram() {
           } finally {
             jokeLock = false;
           }
-        }, 50 * 60 * 1000);
+        }, 2 * 60 * 1000);
 
 
 
