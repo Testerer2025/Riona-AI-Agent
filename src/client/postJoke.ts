@@ -1,7 +1,4 @@
-// DEBUG: Screenshot VOR dem Teilen - in persistenten Ordner
-    const screenshotPath = `/persistent/caption_debug_${Date.now()}.png`;
-    await page.screenshot({ path: screenshotPath });
-    logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);import { Page } from "puppeteer";
+import { Page } from "puppeteer";
 import path from "path";
 import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
@@ -263,8 +260,15 @@ export async function postJoke(page: Page) {
     await findAndFillCaption(page, jokeContent);
     await delay(2000);
 
-    // DEBUG: Screenshot VOR dem Teilen
-    const screenshotPath = `caption_debug_${Date.now()}.png`;
+    // DEBUG: Screenshot VOR dem Teilen - angepasst für GitHub/Render
+    const screenshotDir = process.env.NODE_ENV === 'production' ? '/persistent' : './debug';
+    
+    // Erstelle Debug-Ordner falls nicht vorhanden (für GitHub)
+    if (!fs.existsSync(screenshotDir)) {
+      fs.mkdirSync(screenshotDir, { recursive: true });
+    }
+    
+    const screenshotPath = `${screenshotDir}/caption_debug_${Date.now()}.png`;
     await page.screenshot({ path: screenshotPath });
     logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);
 
@@ -293,9 +297,10 @@ export async function postJoke(page: Page) {
   } catch (error) {
     logger.error("Gesamter Post-Prozess fehlgeschlagen:", error);
     
-    // Screenshot für Debugging
+    // Screenshot für Debugging - angepasst für GitHub/Render
     try {
-      const errorScreenshot = `debug_post_error_${Date.now()}.png`;
+      const screenshotDir = process.env.NODE_ENV === 'production' ? '/persistent' : './debug';
+      const errorScreenshot = `${screenshotDir}/debug_post_error_${Date.now()}.png`;
       await page.screenshot({ path: errorScreenshot });
       logger.info(`Error-Screenshot gespeichert: ${errorScreenshot}`);
     } catch (e) {
