@@ -97,7 +97,7 @@ async function runInstagram() {
     
     
     // Continuously interact with posts without closing the browser
-    while (true) {
+  /*  while (true) {
          await interactWithPosts(page);
          logger.info("Iteration complete, waiting 30 seconds before refreshing...");
          await delay(30000);
@@ -106,7 +106,30 @@ async function runInstagram() {
          } catch (e) {
              logger.warn("Error reloading page, continuing iteration: " + e);
          }
-    }
+    } */
+
+
+    // Warte 50 Minuten bevor Kommentieren/Liken startet
+        logger.info("Warte 50 Minuten bevor Like/Comment-Aktivität startet...");
+        await delay(50 * 60 * 1000); // 50 Minuten warten
+        logger.info("Starte jetzt Like/Comment-Aktivität...");
+        
+        // Continuously interact with posts without closing the browser
+        while (true) {
+             await interactWithPosts(page);
+             logger.info("Iteration complete, waiting 30 seconds before refreshing...");
+             await delay(30000);
+             try {
+                 await page.reload({ waitUntil: "networkidle2" });
+             } catch (e) {
+                 logger.warn("Error reloading page, continuing iteration: " + e);
+             }
+        }
+
+    // 
+    
+
+    
 }
 
 const loginWithCredentials = async (page: any, browser: Browser) => {
