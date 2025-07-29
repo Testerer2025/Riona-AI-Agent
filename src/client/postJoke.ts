@@ -62,190 +62,84 @@ async function clickNextButton(page: Page, timeout = 20_000) {
 }
 
 /** Klickt SHARE-Button (nur beim finalen Teilen!) */
-async function clickShareButton(page: Page) {
+async function clickShareButton(page: Page): Promise<void> {
+  logger.info("Warte auf aktivierten SHARE‑Button…");
+
+  /* 1. Zuerst den Upload‑Spinner abwarten – sonst bleibt der Button disabled */
   try {
-    logger.info(`Suche nach SHARE-Button...`);
-    
-    // Einfach: Klicke den ersten "Share" Button den wir finden
-    const shareButtonClicked = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button, div[role="button"]');
-      for (const btn of buttons) {
-        const text = btn.textContent?.trim();
-        if (text === 'Share' || text === 'Teilen') {
-          (btn as HTMLElement).click();
-          return true;
-        }
-      }
-      return false;
-    });
-    
-    if (shareButtonClicked) {
-      logger.info("✅ SHARE-Button gefunden und geklickt");
-      return;
-    }
-    
-    // Fallback: Suche nach "Post" Button  
-    const postButtonClicked = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button, div[role="button"]');
-      for (const btn of buttons) {
-        const text = btn.textContent?.trim();
-        if (text === 'Post' || text === 'Veröffentlichen') {
-          (btn as HTMLElement).click();
-          return true;
-        }
-      }
-      return false;
-    });
-    
-    if (postButtonClicked) {
-      logger.info("✅ POST-Button als Fallback gefunden und geklickt");
-      return;
-    }
-    
-    throw new Error(`Weder SHARE- noch POST-Button gefunden`);
-    
-  } catch (error) {
-    logger.error(`Fehler beim Klicken des SHARE-Buttons: ${error}`);
-    
-    // Debug: Zeige alle verfügbaren Buttons
-    const availableButtons = await page.evaluate(() => {
-      const buttons = document.querySelectorAll('button, div[role="button"]');
-      return Array.from(buttons).map(btn => btn.textContent?.trim()).filter(text => text && text.length > 0);
-    });
-    
-    logger.info(`Alle verfügbaren Button-Texte: ${JSON.stringify(availableButtons)}`);
-    throw error;
+    await page.waitForFunction(() => !document.querySelector('div[role="progressbar"]'), { timeout: 60_000 });
+  } catch {
+    logger.warn("Progress‑Spinner blieb sichtbar – fahre trotzdem fort");
   }
-}
 
-// GENAUER Debug: Zeige alle möglichen Caption-Felder
-async function findAndFillCaption(page: Page, content: string): Promise<void> {
-  logger.info(`Versuche Caption einzugeben: "${content.substring(0, 100)}..."`);
-  
-  // Erst mal: Zeige ALLE möglichen Caption-Felder
-  const allCaptionFields = await page.evaluate(() => {
-    const fields = [
-      ...document.querySelectorAll('div[contenteditable="true"]'),
-      ...document.querySelectorAll('textarea'),
-      ...document.querySelectorAll('div[role="textbox"]')
-    ];
-    
-    return fields.map((field, index) => ({
-      index,
-      tagName: field.tagName,
-      ariaLabel: field.getAttribute('aria-label'),
-      placeholder: field.getAttribute('placeholder'),
-      textContent: field.textContent?.substring(0, 50),
-      classes: field.className.substring(0, 100),
-      isVisible: (field as HTMLElement).offsetParent !== null,
-      hasDataLexical: field.hasAttribute('data-lexical-editor')
-    }));
-  });
-  
-  logger.info(`ALLE GEFUNDENEN FELDER: ${JSON.stringify(allCaptionFields, null, 2)}`);
-  
-  // Spezifische Selektoren für Instagram's Lexical Editor
-  const captionSelectors = [
-    'div[aria-label="Bildunterschrift verfassen …"][data-lexical-editor="true"]',
-    'div[aria-label*="Bildunterschrift"][contenteditable="true"][data-lexical-editor="true"]',
-    'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
-    'div[aria-label*="Bildunterschrift"][contenteditable="true"]',
-    'div[role="textbox"][contenteditable="true"]',
-    'div[contenteditable="true"]'
-  ];
+  /* 2. Innerhalb des Dialogs den sichtbaren, NICHT deaktivierten Button suchen */
+  const clicked = await page.waitForFunction(
+    () => {
+      const dialog = document.querySelector('div[role="dialog"]');
+      if (!dialog) return false;
 
-  let captionFilled = false;
+      const btn = [...dialog.querySelectorAll<HTMLElement>('button, div[role="button"]')].find(b => {
+        const txt = (b.textContent || "").trim();
+        const visible = b.offsetParent !== null;
+        const enabled = !b.hasAttribute("disabled") &&
+                        !(b as HTMLButtonElement).disabled &&
+                        b.getAttribute("aria-disabled") !== "true";
+        return visible && enabled && (txt === "Teilen" || txt === "Share");
+      });
 
-  for (const selector of captionSelectors) {
-    try {
-      logger.info(`Versuche Caption-Selektor: ${selector}`);
-      
-      await page.waitForSelector(selector, { timeout: 3000, visible: true });
-      
-      // Prüfe welches Element genau gefunden wurde
-      const elementInfo = await page.evaluate((sel) => {
-        const el = document.querySelector(sel) as HTMLElement;
-        if (!el) return null;
-        
-        return {
-          ariaLabel: el.getAttribute('aria-label'),
-          textContent: el.textContent,
-          innerHTML: el.innerHTML.substring(0, 200),
-          hasDataLexical: el.hasAttribute('data-lexical-editor'),
-          isVisible: el.offsetParent !== null,
-          boundingRect: el.getBoundingClientRect()
-        };
-      }, selector);
-      
-      logger.info(`GEFUNDEN: ${JSON.stringify(elementInfo)}`);
-      
-      // Nur fortfahren wenn es das richtige Feld ist
-      if (!elementInfo?.ariaLabel?.includes('Bildunterschrift') && 
-          !elementInfo?.ariaLabel?.includes('caption')) {
-        logger.warn(`ÜBERSPRINGE - Nicht das Caption-Feld: ${elementInfo?.ariaLabel}`);
-        continue;
-      }
-      
-      // Instagram Lexical Editor - NUR JavaScript, KEIN Puppeteer
-      const success = await page.evaluate((sel, text) => {
-        const element = document.querySelector(sel) as HTMLElement;
-        if (!element) return false;
-        
-        // 1. Fokus setzen
-        element.focus();
-        element.click();
-        
-        // 2. Lexical Editor: Setze innerHTML UND innerText
-        element.innerHTML = `<p class="xdj266r x14z9mp xat24cr x1lziwak" dir="ltr"><span data-lexical-text="true">${text}</span></p>`;
-        element.innerText = text;
-        
-        // 3. Alle Events für React/Lexical
-        const events = [
-          new Event('focus', { bubbles: true }),
-          new Event('input', { bubbles: true, composed: true }),
-          new Event('change', { bubbles: true }),
-          new InputEvent('input', { data: text, bubbles: true, composed: true }),
-          new Event('blur', { bubbles: true })
-        ];
-        
-        events.forEach(event => element.dispatchEvent(event));
-        
+      if (btn) {
+        btn.click();
         return true;
-      }, selector, content);
-      
-      if (success) {
-        logger.info(`✅ Caption eingegeben in das RICHTIGE Feld: ${selector}`);
-        captionFilled = true;
-        
-        // Debug: Was steht nach der Eingabe wirklich im Feld?
-        await delay(1000);
-        const finalCheck = await page.evaluate((sel) => {
-          const el = document.querySelector(sel) as HTMLElement;
-          if (!el) return { status: "ELEMENT_NOT_FOUND", innerHTML: "", innerText: "", textContent: "" };
-          
-          return {
-            status: "SUCCESS",
-            innerHTML: el.innerHTML,
-            innerText: el.innerText,
-            textContent: el.textContent || ""
-          };
-        }, selector);
-        
-        logger.info(`FINAL CHECK - innerHTML: "${finalCheck.innerHTML}"`);
-        logger.info(`FINAL CHECK - innerText: "${finalCheck.innerText}"`);
-        break;
       }
-      
-    } catch (error) {
-      logger.debug(`Selektor ${selector} nicht gefunden`);
-      continue;
-    }
-  }
+      return false;
+    },
+    { timeout: 60_000 }
+  );
 
-  if (!captionFilled) {
-    throw new Error("Caption-Feld konnte nicht gefunden werden");
-  }
+  if (!clicked) throw new Error("Share‑Button nicht klickbar");
+  logger.info("✅ Share‑Button geklickt, warte auf Dialog‑Verschwinden…");
+
+  /* 3. Bestätigung: Dialog verschwindet oder Feed lädt neu */
+  await Promise.race([
+    page.waitForFunction(() => !document.querySelector('div[role="dialog"]'), { timeout: 60_000 }),
+    page.waitForNavigation({ timeout: 60_000, waitUntil: "networkidle2" }),
+  ]);
+
+  logger.info("✅ Post veröffentlicht (Dialog weg oder Navigation)");
 }
+
+
+
+
+async function findAndFillCaption(page: Page, text: string): Promise<void> {
+  logger.info(`Versuche Caption einzugeben: "${text.slice(0, 100)}…"`);
+  
+  // Instagram‑Lexical‑Editor (wie im Snippet: div[role="textbox"] … data-lexical-editor)
+  const sel = 'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]';
+  await page.waitForSelector(sel, { timeout: 10_000, visible: true });
+  const handle = await page.$(sel);
+  if (!handle) throw new Error("Caption‑Feld nicht gefunden");
+
+  // Inhalt löschen und echten Tippevorgang durchführen, damit React den State speichert
+  await handle.click({ clickCount: 1 });
+  await page.keyboard.down("Control");
+  await page.keyboard.press("A");
+  await page.keyboard.up("Control");
+  await page.keyboard.press("Backspace");
+  await page.type(sel, text, { delay: 25 }); // erzeugt focus / input / change‑Events
+  await delay(500);
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await delay(300);
+
+  // kleiner Log zum Gegencheck
+  const current = await page.evaluate(s => document.querySelector<HTMLElement>(s)?.innerText || "", sel);
+  logger.info(`Caption‑Länge nach Eingabe: ${current.length}`);
+}
+
+
+
+
+
 
 // Erstelle ein einfaches Placeholder-Bild falls keins existiert
 async function ensureImageExists(): Promise<string> {
