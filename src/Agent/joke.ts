@@ -1,5 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getJokeSchema } from "./schema";
+import { runAgent } from ".";
 import logger from "../config/logger";
 
 // Initialisiere Google AI
@@ -19,60 +18,70 @@ const postPrompts = [
 
 export async function generateJoke(): Promise<string> {
     try {
-        // Prüfe API Key
-        if (!process.env.GOOGLE_AI_API_KEY) {
-            logger.warn("Kein Google AI API Key gefunden, verwende Fallback");
-            return getFallbackPost();
-        }
-
         // Zufälligen Prompt auswählen
         const randomPrompt = postPrompts[Math.floor(Math.random() * postPrompts.length)];
         
         const fullPrompt = `${randomPrompt}
 
-Erstelle einen ansprechenden Instagram-Post mit folgenden Anforderungen:
-- Haupttext auf Deutsch (maximal 150 Wörter)
-- Authentischer, menschlicher Ton
-- Familienfreundlich und positiv
-- Am Ende 3-5 relevante deutsche Hashtags
-- Keine Emojis im Haupttext (nur am Ende erlaubt)
+Erstelle einen ansprechenden Instagram-Post mit:
+- Einem fesselnden Haupttext (max. 150 Wörter) 
+- Authentischem, menschlichem Ton
+- Auf Deutsch
+- Familienfreundlich
+- Ohne Emojis im Haupttext (nur am Ende erlaubt)
+- Mit 3-5 relevanten Hashtags am Ende
 
-Format:
+Format: 
 [Haupttext]
 
-[Hashtags mit #]
+[Hashtags]
 
-Beispiel:
-Das Leben ist wie ein guter Kaffee - manchmal bitter, aber immer besser mit Freunden!
+Wichtig: Antworte nur mit dem Post-Text, keine zusätzlichen Erklärungen.`;
 
-Mit wem trinkt ihr heute euren Kaffee?
-
-#freundschaft #kaffee #lebensweisheit #positiv #zusammen
-
-Wichtig: Antworte nur mit dem Post-Inhalt, keine zusätzlichen Erklärungen.`;
-
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-pro",
-            generationConfig: {
-                maxOutputTokens: 500,
-                temperature: 0.9,
-            }
-        });
-
-        const result = await model.generateContent(fullPrompt);
-        const response = await result.response;
-        const text = response.text();
+        // Verwende runAgent ohne Schema (wie ursprünglich)
+        const data = await runAgent(null as any, fullPrompt);
         
-        if (text && text.trim().length > 10) {
-            logger.info("Post erfolgreich generiert:", text.substring(0, 50) + "...");
-            return text.trim();
-        } else {
-            logger.warn("Unzureichende AI-Antwort, verwende Fallback");
-            return getFallbackPost();
+        // Erweiterte Datenformat-Erkennung
+        if (Array.isArray(data)) {
+            if (data[0]?.witz) return data[0].witz;
+            if (data[0]?.instagram_post) return data[0].instagram_post;
+            if (data[0]?.joke) return data[0].joke;
+            if (data[0]?.content) return data[0].content;
+            if (data[0]?.post) return data[0].post;
         }
         
+        if (typeof data === "object" && data !== null) {
+            if (data.witz) return String(data.witz);
+            if (data.instagram_post) return String(data.instagram_post);
+            if (data.joke) return String(data.joke);
+            if (data.content) return String(data.content);
+            if (data.post) return String(data.post);
+        }
+        
+        // Fallback - direkter String oder JSON parsen
+        if (typeof data === "string") {
+            try {
+                const parsed = JSON.parse(data);
+                if (Array.isArray(parsed) && parsed[0]?.witz) {
+                    return parsed[0].witz;
+                }
+                if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
+                    return parsed[0].instagram_post;
+                }
+                if (parsed?.witz) return parsed.witz;
+                if (parsed?.instagram_post) return parsed.instagram_post;
+                return data;
+            } catch {
+                return data;
+            }
+        }
+
+        // Letzter Fallback
+        logger.warn("Unerwartetes Datenformat:", JSON.stringify(data));
+        return getFallbackPost();
+        
     } catch (error) {
-        logger.error("Fehler bei AI Post-Generierung:", error);
+        logger.error("Fehler bei generateJoke:", error);
         return getFallbackPost();
     }
 }
