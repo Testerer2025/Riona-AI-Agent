@@ -1,4 +1,7 @@
-import { Page } from "puppeteer";
+// DEBUG: Screenshot VOR dem Teilen - in persistenten Ordner
+    const screenshotPath = `/persistent/caption_debug_${Date.now()}.png`;
+    await page.screenshot({ path: screenshotPath });
+    logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);import { Page } from "puppeteer";
 import path from "path";
 import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
@@ -44,7 +47,7 @@ async function clickDialogButton(
   }
 }
 
-// DEBUG-Version der Caption-Eingabe
+// ROBUSTE Caption-Eingabe mit mehreren Methoden
 async function findAndFillCaption(page: Page, content: string): Promise<void> {
   logger.info(`Versuche Caption einzugeben: "${content.substring(0, 100)}..."`);
   
@@ -66,18 +69,61 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
       
       await page.waitForSelector(selector, { timeout: 3000, visible: true });
       
-      // Hole das Element (wie beim Kommentieren)
-      const captionElement = await page.$(selector);
-      if (captionElement) {
+      // Methode 1: JavaScript-based (wie bei React-Apps nötig)
+      const jsSuccess = await page.evaluate((sel, text) => {
+        const element = document.querySelector(sel) as HTMLElement;
+        if (!element) return false;
         
-        // Methode 1: Einfach wie beim Kommentieren
-        logger.info("Verwende element.type() Methode...");
-        await captionElement.type(content);
+        // Fokus setzen
+        element.focus();
+        element.click();
+        
+        // Text setzen je nach Element-Typ
+        if (element.tagName === 'TEXTAREA') {
+          const textarea = element as HTMLTextAreaElement;
+          textarea.value = text;
+          
+          // React Events triggern
+          const nativeTextAreaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+          if (nativeTextAreaSetter) {
+            nativeTextAreaSetter.call(textarea, text);
+          }
+        } else if (element.contentEditable === 'true') {
+          element.innerText = text;
+        }
+        
+        // Events feuern
+        element.dispatchEvent(new Event('focus', { bubbles: true }));
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('blur', { bubbles: true }));
+        
+        return true;
+      }, selector, content);
+      
+      if (jsSuccess) {
+        logger.info(`JavaScript-Methode erfolgreich für: ${selector}`);
+        
+        // Zusätzlich: Puppeteer type() als Backup
+        try {
+          const captionElement = await page.$(selector);
+          if (captionElement) {
+            await captionElement.focus();
+            await page.keyboard.down('Control');
+            await page.keyboard.press('KeyA');
+            await page.keyboard.up('Control');
+            await delay(300);
+            await captionElement.type(content, { delay: 50 });
+            logger.info("Zusätzlich: Puppeteer type() ausgeführt");
+          }
+        } catch (e) {
+          logger.warn("Puppeteer type() fehlgeschlagen, aber JavaScript-Methode sollte funktioniert haben");
+        }
         
         captionFilled = true;
-        logger.info(`Caption eingegeben mit Selektor: ${selector}`);
         
-        // Zusätzlich: Prüfe ob der Text wirklich da ist
+        // Prüfe was wirklich im Feld steht
+        await delay(500);
         const actualText = await page.evaluate((sel) => {
           const el = document.querySelector(sel) as HTMLElement;
           if (!el) return "ELEMENT_NOT_FOUND";
@@ -89,7 +135,7 @@ async function findAndFillCaption(page: Page, content: string): Promise<void> {
           return "UNKNOWN_TYPE";
         }, selector);
         
-        logger.info(`Text im Feld nach Eingabe: "${actualText.substring(0, 50)}..."`);
+        logger.info(`FINAL: Text im Feld: "${actualText}"`);
         break;
       }
       
