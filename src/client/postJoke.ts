@@ -293,18 +293,74 @@ export async function postJoke(page: Page) {
     /* ░░ 6) „Teilen/Share" ░░ */
     try {
       logger.info("Versuche Post zu teilen...");
+      
+      // DEBUG: Prüfe vor dem Share-Klick nochmal das Caption-Feld
+      const preShareCheck = await page.evaluate(() => {
+        const captionEl = document.querySelector('div[role="textbox"][contenteditable="true"]') as HTMLElement;
+        if (captionEl) {
+          return {
+            hasText: captionEl.innerText.length > 0,
+            textLength: captionEl.innerText.length,
+            textContent: captionEl.innerText.substring(0, 100)
+          };
+        }
+        return { hasText: false, textLength: 0, textContent: "ELEMENT_NOT_FOUND" };
+      });
+      
+      logger.info(`PRE-SHARE CHECK - Hat Text: ${preShareCheck.hasText}, Länge: ${preShareCheck.textLength}`);
+      logger.info(`PRE-SHARE TEXT: "${preShareCheck.textContent}"`);
+      
       await clickDialogButton(page, ["share", "teilen", "post", "veröffentlichen"]);
       
       // Warten auf Bestätigung
       await delay(5000);
       
+      // DEBUG: Nach dem Share - prüfe ob Dialog verschwunden oder Fehler aufgetreten
+      const postShareStatus = await page.evaluate(() => {
+        // Suche nach Dialogen
+        const dialogs = document.querySelectorAll('div[role="dialog"]');
+        const hasDialog = dialogs.length > 0;
+        
+        // Suche nach Error-Messages
+        const errorMessages = document.querySelectorAll('[data-testid="error"], .error, [aria-live="polite"]');
+        const errors = Array.from(errorMessages).map(el => el.textContent).filter(text => text && text.length > 0);
+        
+        // Suche nach Success-Indicators  
+        const successIndicators = document.querySelectorAll('[data-testid="success"], .success');
+        const hasSuccess = successIndicators.length > 0;
+        
+        return {
+          hasDialog,
+          dialogCount: dialogs.length,
+          errors,
+          hasSuccess,
+          currentUrl: window.location.href
+        };
+      });
+      
+      logger.info(`POST-SHARE STATUS:`);
+      logger.info(`- Dialoge noch da: ${postShareStatus.hasDialog} (${postShareStatus.dialogCount})`);
+      logger.info(`- Fehler gefunden: ${JSON.stringify(postShareStatus.errors)}`);
+      logger.info(`- Success-Indicator: ${postShareStatus.hasSuccess}`);
+      logger.info(`- Current URL: ${postShareStatus.currentUrl}`);
+      
       // Prüfen ob Post erfolgreich war
       try {
         await page.waitForSelector('div[role="dialog"]', { timeout: 3000, hidden: true });
-        logger.info("Post erfolgreich geteilt! 🎉");
+        logger.info("✅ Post erfolgreich geteilt - Dialog verschwunden!");
       } catch (e) {
-        // Dialog noch da, könnte aber trotzdem erfolgreich sein
-        logger.info("Post wahrscheinlich erfolgreich geteilt");
+        logger.warn("⚠️ Dialog noch sichtbar - Post möglicherweise nicht erfolgreich");
+        
+        // DEBUG: Was steht in den noch sichtbaren Dialogen?
+        const dialogContent = await page.evaluate(() => {
+          const dialogs = document.querySelectorAll('div[role="dialog"]');
+          return Array.from(dialogs).map(dialog => ({
+            text: dialog.textContent?.substring(0, 200),
+            buttons: Array.from(dialog.querySelectorAll('button')).map(btn => btn.textContent)
+          }));
+        });
+        
+        logger.info(`Verbleibende Dialog-Inhalte: ${JSON.stringify(dialogContent)}`);
       }
       
     } catch (error) {
