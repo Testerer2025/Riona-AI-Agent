@@ -395,25 +395,23 @@ export async function postJoke(page: Page) {
       throw error;
     }
 
-    /* ░░ 5) Caption - VOLLSTÄNDIGES DEBUG ░░ */
-    logger.info("Beginne Caption-Eingabe...");
-    const jokeContent = Array.isArray(joke) ? joke[0]?.witz ?? "" : (joke as string);
-    logger.info(`Vollständiger Caption-Text: "${jokeContent}"`); // DEBUG - zeigt ganzen Text
-    
-    await findAndFillCaption(page, jokeContent);
-    
-    // WICHTIG: Länger warten damit Instagram den Text erkennt
-    logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
-    await delay(5000);
+   /* ░░ 5) Caption eingeben ░░ */
+logger.info("Beginne Caption-Eingabe...");
+// jokeContent ist bereits oben definiert - einfach verwenden:
+await findAndFillCaption(page, jokeContent);
 
-    // Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
-    try {
-      await page.click('div[contenteditable="true"][aria-label*="caption"]');
-      logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
-      await delay(1000);
-    } catch (e) {
-      logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
-    }
+// WICHTIG: Länger warten damit Instagram den Text erkennt
+logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
+await delay(5000);
+
+// Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
+try {
+  await page.click('div[contenteditable="true"][aria-label*="caption"]');
+  logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
+  await delay(1000);
+} catch (e) {
+  logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
+}
 
     // DEBUG: Screenshot - einfach ins Hauptverzeichnis
     const screenshotPath = `debug_${Date.now()}.png`;
