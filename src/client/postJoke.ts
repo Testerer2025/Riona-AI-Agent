@@ -320,8 +320,12 @@ export async function postJoke(page: Page) {
     const joke = await generateJoke();
     logger.info(`Neuer Witz generiert: ${JSON.stringify(joke)}`);
 
-    /* ░░ 0.1) Stelle sicher dass ein Bild existiert ░░ */
-    const imagePath = await ensureImageExists(jokeContent);
+    /* ░░ 0.1) jokeContent FRÜHER definieren ░░ */
+    const jokeContent = Array.isArray(joke) ? joke[0]?.witz ?? "" : (joke as string);
+    logger.info(`Vollständiger Caption-Text: "${jokeContent}"`);
+
+    /* ░░ 0.2) JETZT Bild mit jokeContent auswählen ░░ */
+    const imagePath = await ensureImageExists(jokeContent); // ✅ Jetzt funktioniert es!
 
     /* ░░ 1) Instagram‑Startseite ░░ */
     await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
