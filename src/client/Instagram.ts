@@ -238,7 +238,7 @@ async function interactWithPosts(page: any) {
             const commentBox = await page.$(commentBoxSelector);
             if (commentBox) {
                 console.log(`Commenting on post ${postIndex}...`);
-                const prompt = `Formuliere einen kurzen, sympathischen Kommentar auf **Deutsch** zum folgenden Instagram-Post: "${caption}". Sprich die Person direkt mit „du“ an, bleib freundlich, locker und humorvoll. Wenn es natürlich passt, darf Brokkoli erwähnt werden. Vermeide alles, was wie Spam aussieht. Es ist sehr wichtig, dass die Antwort relevant, durchdacht und inhaltlich wertvoll ist. Sie sollte Empathie und Professionalität vermitteln und dabei nicht zu oberflächlich wirken. Erwähne nicht, dass du dem Kanal gefolgt bist. Maximal 300 Zeichen.`;
+                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
                 const schema = getInstagramCommentSchema();
                 const result = await runAgent(schema, prompt);
                 const comment = result[0]?.comment;
