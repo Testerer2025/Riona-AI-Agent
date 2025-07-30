@@ -4,6 +4,38 @@ import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
 import fs from 'fs';
 
+interface ImageCategory {
+  keywords: string[];
+  folder: string;
+}
+
+const imageCategories: ImageCategory[] = [
+  {
+    keywords: ['business', 'büro', 'meeting', 'arbeit', 'job', 'karriere', 'unternehmen', 'strategie', 'planung'],
+    folder: 'business'
+  },
+  {
+    keywords: ['social media', 'instagram', 'tiktok', 'facebook', 'linkedin', 'content', 'posting', 'community', 'engagement'],
+    folder: 'social-media'
+  },
+  {
+    keywords: ['analytics', 'daten', 'statistik', 'performance', 'roi', 'zahlen', 'auswertung', 'messung', 'kpi'],
+    folder: 'analytics'
+  },
+  {
+    keywords: ['technologie', 'tools', 'digital', 'innovation', 'ki', 'software', 'app', 'tech', 'computer'],
+    folder: 'tech'
+  },
+  {
+    keywords: ['team', 'agentur', 'zusammenarbeit', 'mitarbeiter', 'kollaboration', 'gruppe', 'workshop'],
+    folder: 'team'
+  },
+  {
+    keywords: ['marketing', 'werbung', 'kampagne', 'brand', 'marke', 'advertising', 'promotion'],
+    folder: 'marketing'
+  },
+];
+
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -137,34 +169,148 @@ async function findAndFillCaption(page: Page, text: string): Promise<void> {
 
 
 
-
-
-
-// Erstelle ein einfaches Placeholder-Bild falls keins existiert
-async function ensureImageExists(): Promise<string> {
-  const imagePath = path.resolve("assets/brokkoli.jpg");
-  const assetsDir = path.dirname(imagePath);
+// Erweiterte ensureImageExists Funktion
+async function ensureImageExists(postContent?: string): Promise<string> {
+  const assetsDir = path.resolve("assets");
   
-  // Erstelle assets Verzeichnis falls es nicht existiert
+  // Erstelle Hauptverzeichnis
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
   }
   
-  // Prüfe ob Bild existiert
-  if (!fs.existsSync(imagePath)) {
-    logger.warn("Bild nicht gefunden, erstelle Placeholder...");
+  // Erstelle alle Kategorieordner
+  await createCategoryFolders();
+  
+  try {
+    if (postContent) {
+      // Bestimme Kategorie basierend auf Post-Inhalt
+      const category = determineImageCategory(postContent);
+      logger.info(`Erkannte Bildkategorie für Post: ${category}`);
+      
+      return await getRandomImageFromCategory(category);
+    } else {
+      // Fallback zu default Kategorie
+      return await getRandomImageFromCategory('default');
+    }
     
-    // Erstelle ein einfaches 1x1 Pixel PNG als Fallback
-    // Das ist ein base64-kodiertes 1x1 weißes PNG
-    const base64PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
-    const buffer = Buffer.from(base64PNG, 'base64');
-    fs.writeFileSync(imagePath, buffer);
-    
-    logger.info("Placeholder-Bild erstellt");
+  } catch (error) {
+    logger.error("Fehler bei intelligenter Bildauswahl:", error);
+    return await createFallbackImage();
+  }
+}
+
+function determineImageCategory(postContent: string): string {
+  const content = postContent.toLowerCase();
+  
+  // Durchsuche alle Kategorien nach passenden Keywords
+  for (const category of imageCategories) {
+    for (const keyword of category.keywords) {
+      if (content.includes(keyword.toLowerCase())) {
+        logger.info(`Keyword "${keyword}" gefunden, verwende Kategorie: ${category.folder}`);
+        return category.folder;
+      }
+    }
   }
   
+  logger.info("Keine spezifische Kategorie gefunden, verwende default");
+  return 'default';
+}
+
+async function getRandomImageFromCategory(category: string): Promise<string> {
+  const categoryPath = path.resolve("assets", category);
+  
+  // Prüfe ob Kategorie-Ordner existiert
+  if (!fs.existsSync(categoryPath)) {
+    logger.warn(`Kategorie-Ordner ${category} existiert nicht, erstelle ihn...`);
+    fs.mkdirSync(categoryPath, { recursive: true });
+    
+    // Wenn leer, fallback zu default
+    if (category !== 'default') {
+      return await getRandomImageFromCategory('default');
+    }
+  }
+  
+  // Lade alle Bilddateien aus dem Ordner
+  const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp'];
+  const imageFiles = fs.readdirSync(categoryPath)
+    .filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return supportedFormats.includes(ext);
+    });
+  
+  if (imageFiles.length === 0) {
+    logger.warn(`Keine Bilder in Kategorie ${category} gefunden`);
+    
+    if (category !== 'default') {
+      return await getRandomImageFromCategory('default');
+    } else {
+      // Erstelle Fallback-Bild für default
+      return await createFallbackImage();
+    }
+  }
+  
+  // Wähle zufälliges Bild
+  const randomIndex = Math.floor(Math.random() * imageFiles.length);
+  const selectedImage = imageFiles[randomIndex];
+  const imagePath = path.join(categoryPath, selectedImage);
+  
+  logger.info(`Gewähltes Bild: ${selectedImage} aus Kategorie ${category}`);
   return imagePath;
 }
+
+async function createCategoryFolders(): Promise<void> {
+  const baseDir = path.resolve("assets");
+  
+  // Erstelle alle Kategorieordner + default
+  const allFolders = [...imageCategories.map(cat => cat.folder), 'default'];
+  
+  for (const folder of allFolders) {
+    const folderPath = path.join(baseDir, folder);
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+      logger.info(`Kategorie-Ordner erstellt: ${folder}`);
+    }
+  }
+}
+
+async function createFallbackImage(): Promise<string> {
+  const fallbackPath = path.resolve("assets/default/fallback.jpg");
+  const defaultDir = path.dirname(fallbackPath);
+  
+  // Erstelle default Ordner falls nicht vorhanden
+  if (!fs.existsSync(defaultDir)) {
+    fs.mkdirSync(defaultDir, { recursive: true });
+  }
+  
+  if (fs.existsSync(fallbackPath)) {
+    return fallbackPath;
+  }
+  
+  // Erstelle 1x1 Pixel Placeholder (dein ursprünglicher Code)
+  logger.warn("Erstelle Fallback-Bild...");
+  const base64PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+  const buffer = Buffer.from(base64PNG, 'base64');
+  fs.writeFileSync(fallbackPath, buffer);
+  
+  logger.info("Fallback-Bild erstellt");
+  return fallbackPath;
+}
+
+// Debug-Funktion zum Testen der Bildauswahl
+export async function testImageSelection(testPosts: string[]): Promise<void> {
+  logger.info("=== BILD-AUSWAHL TEST ===");
+  
+  for (const post of testPosts) {
+    const imagePath = await ensureImageExists(post);
+    const category = determineImageCategory(post);
+    logger.info(`Post: "${post.substring(0, 60)}..."`);
+    logger.info(`→ Kategorie: ${category}`);
+    logger.info(`→ Bild: ${imagePath}`);
+    logger.info("---");
+  }
+}
+
+export { ensureImageExists };
 
 export async function postJoke(page: Page) {
   try {
@@ -175,7 +321,7 @@ export async function postJoke(page: Page) {
     logger.info(`Neuer Witz generiert: ${JSON.stringify(joke)}`);
 
     /* ░░ 0.1) Stelle sicher dass ein Bild existiert ░░ */
-    const imagePath = await ensureImageExists();
+    const imagePath = await ensureImageExists(jokeContent);
 
     /* ░░ 1) Instagram‑Startseite ░░ */
     await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
