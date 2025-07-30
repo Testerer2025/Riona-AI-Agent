@@ -247,6 +247,14 @@ async function getRandomImageFromCategory(category: string): Promise<string> {
   // Lade alle Bilddateien aus dem Ordner
   const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp'];
   const imageFiles = fs.readdirSync(categoryPath)
+  .filter(file => {
+    const ext = path.extname(file).toLowerCase();
+    return supportedFormats.includes(ext);
+  })
+  .sort(() => Math.random() - 0.5); // ✅ Shuffle das Array!
+
+// Dann wähle zufälliges Bild:
+const randomIndex = Math.floor(Math.random() * imageFiles.length);
     .filter(file => {
       const ext = path.extname(file).toLowerCase();
       return supportedFormats.includes(ext);
