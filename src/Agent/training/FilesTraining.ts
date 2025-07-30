@@ -50,7 +50,7 @@ export async function parseFile(fileBuffer: Buffer, fileType: SupportedFileType)
 async function testParse() {
     try {
         // Define the file path and type
-        const filePath = path.join(__dirname, 'test.txt'); 
+        const filePath = path.join(__dirname, '../../../src/Agent/training/data/agentur-training.txt');
         const fileType: SupportedFileType = 'txt'; // Change to match your test file's format
 
         // Read the file into a buffer
