@@ -16,7 +16,6 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.9",
-    "cheerio": "^1.0.0-rc.12",
     "cookie-parser": "^1.4.7",
     "copyfiles": "^2.4.1",
     "cron": "^3.5.0",
@@ -50,7 +49,6 @@
     "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
-    "@types/cheerio": "^0.22.35",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/jsdom": "^21.1.7",
