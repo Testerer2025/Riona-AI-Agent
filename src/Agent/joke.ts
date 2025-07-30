@@ -1,6 +1,57 @@
 import { runAgent } from ".";
 import axios from 'axios';
 
+// Variation-Systeme für unterschiedliche Posts
+const TIP_VARIATIONS = [
+  {
+    format: "💡 Profi-Tipp: {tip}\n\n✨ Das bringt dir: {benefit}\n\nSchon ausprobiert? Erzählt in den Kommentaren! 👇",
+    topics: ['Stories optimieren', 'Engagement steigern', 'Content planen', 'Hashtag-Strategie', 'Reichweite erhöhen'],
+    style: 'praktisch und direkt'
+  },
+  {
+    format: "🎯 Marketing-Hack: {tip}\n\n📊 Ergebnis: {result}\n\nWer testet es diese Woche? 🚀",
+    topics: ['A/B Testing', 'Conversion optimieren', 'Zielgruppe finden', 'Content-Timing', 'Influencer Marketing'],
+    style: 'datenorientiert'
+  },
+  {
+    format: "🔥 Geheimtipp aus 5 Jahren Agentur-Erfahrung:\n\n{tip}\n\n💪 Warum das funktioniert: {reason}\n\nFragen? Immer her damit! 💬",
+    topics: ['Client Management', 'Kampagnen-Optimierung', 'Budget-Verteilung', 'Team-Workflows', 'Tool-Empfehlungen'],
+    style: 'erfahrungsbasiert'
+  },
+  {
+    format: "⚡ Quick-Win für heute: {tip}\n\n⏰ Aufwand: {time}\n📈 Impact: {impact}\n\nWer macht mit? 👥",
+    topics: ['Profile optimieren', 'Bio verbessern', 'Story-Highlights', 'Posting-Zeiten', 'Community-Building'],
+    style: 'actionable und zeiteffizient'
+  }
+];
+
+const AGENCY_VARIATIONS = [
+  {
+    angle: 'Behind-the-Scenes',
+    topics: ['Wie wir Strategien entwickeln', 'Ein Tag in der Agentur', 'Client-Meetings', 'Kreativprozess', 'Team-Dynamics']
+  },
+  {
+    angle: 'Industry Insights',
+    topics: ['Was wir täglich sehen', 'Häufige Fehler', 'Erfolgs-Pattern', 'Markt-Trends', 'Tool-Updates']
+  },
+  {
+    angle: 'Client Success',
+    topics: ['Erfolgsgeschichten', 'Vor-Nachher Vergleiche', 'Learnings', 'Challenges gemeistert', 'Wachstums-Stories']
+  },
+  {
+    angle: 'Educational',
+    topics: ['Strategie-Basics', 'Tool-Vergleiche', 'Best Practices', 'Fehler vermeiden', 'Schritt-für-Schritt Guides']
+  }
+];
+
+const MOTIVATIONAL_STYLES = [
+  'Unternehmer-Mindset', 'Team-Spirit', 'Innovation-Focus', 'Durchhaltevermögen', 
+  'Kundenzentrierung', 'Kreativität', 'Authentizität', 'Wachstums-Mentalität'
+];
+
+// Post-Counter für Variation (einfache Lösung)
+let postCounter = 0;
+
 // Post-Typen definieren
 export enum PostType {
   AGENCY_SHOWCASE = 'agency_showcase',
@@ -127,53 +178,84 @@ async function generateNewsBasedPost(): Promise<string> {
 }
 
 async function generateAgencyPost(): Promise<string> {
-  const agencyTopic = AGENCY_TOPICS[Math.floor(Math.random() * AGENCY_TOPICS.length)];
+  const variation = AGENCY_VARIATIONS[postCounter % AGENCY_VARIATIONS.length];
+  const topic = variation.topics[Math.floor(Math.random() * variation.topics.length)];
   
   const prompt = `
-    Erstelle einen professionellen Instagram Post für eine Social Media & Digital Marketing Agentur zum Thema: "${agencyTopic}"
+    Erstelle einen "${variation.angle}" Social Media Post zum Thema: "${topic}"
     
-    Stil:
-    - Professionell aber persönlich
+    Anforderungen:
+    - Persönliche Agentur-Perspektive
+    - 350-450 Zeichen (ausführlicher!)
+    - Authentisch und nahbar
     - Zeige Expertise ohne zu prahlen
-    - Deutsch, max 250 Zeichen
-    - Biete Mehrwert für Follower
-    - Subtile Call-to-Action
-    - Mit passenden Hashtags am Ende
+    - Lade zur Diskussion ein
     
-    Beispiel-Format:
-    "🚀 Erfolgreiche Social Media Strategie beginnt mit klaren Zielen. Was möchtet ihr erreichen?
+    Stil-Variationen (wähle zufällig):
+    - Mal mit konkretem Beispiel
+    - Mal mit Statistik/Zahl
+    - Mal mit persönlicher Erfahrung
+    - Mal mit Frage an Community
     
-    #digitalmarketing #socialmedia #strategie #agentur"
+    Vermeide diese Phrasen (schon zu oft verwendet):
+    - "Erfolgreiche Social Media Strategie"
+    - "Was denkt ihr?"
+    - "Schreibt uns!"
     
-    Erstelle ähnlichen Content, aber mit anderem Thema.
+    Beispiel-Output:
+    "👥 Gestern im Client-Call: 'Warum performen unsere Posts plötzlich schlechter?'
+    
+    🔍 Die Analyse zeigte: Algorithmus-Update vor 2 Wochen.
+    
+    💡 Unsere Lösung: Content-Format gewechselt → +65% Reichweite in 5 Tagen
+    
+    Erlebt ihr auch Schwankungen? Wie geht ihr damit um? 💬
+    
+    #agenturleben #algorithmus #contentmarketing #problemlösung"
   `;
   
   const result = await runAgent(null as any, prompt);
+  postCounter++;
   return parseSimpleResponse(result);
 }
 
 async function generateTipsPost(): Promise<string> {
+  const variation = TIP_VARIATIONS[postCounter % TIP_VARIATIONS.length];
+  const topic = variation.topics[Math.floor(Math.random() * variation.topics.length)];
+  
   const prompt = `
-    Erstelle einen "Tipp des Tages" Post für eine Social Media Agentur.
+    Erstelle einen ${variation.style}en Marketing-Tipp Post zum Thema: "${topic}"
+    
+    Format-Vorgabe: "${variation.format}"
+    (Ersetze {tip}, {benefit}, {result}, {reason}, {time}, {impact} mit konkreten Inhalten)
     
     Anforderungen:
-    - 1 konkreter, umsetzbarer Marketing-Tipp
-    - Deutsch, max 250 Zeichen
-    - Begründung warum der Tipp funktioniert
-    - Call-to-Action für Engagement
-    - Mit passenden Hashtags
+    - Deutsch, professionell aber persönlich
+    - Konkret und umsetzbar
+    - 300-400 Zeichen (länger als bisher!)
+    - Unterschiedlich zu vorherigen Posts
+    - Regt zur Interaktion an
     
-    Format:
-    "💡 Tipp: [Konkreter Tipp hier]
+    Variiere diese Elemente:
+    - Emoji-Auswahl
+    - Fragestellung
+    - Call-to-Action
+    - Tonalität (mal direkter, mal sanfter)
     
-    Warum? [Kurze Begründung]
+    Beispiel-Output:
+    "🎯 Marketing-Hack: Teste deine Posts zu verschiedenen Uhrzeiten!
     
-    Probiert es aus! 👇
+    📊 Ergebnis: 40% mehr Engagement zur optimalen Zeit
     
-    #marketingtipp #socialmediatips #digitalmarketing"
+    🕐 Beste Zeiten: 8-9 Uhr, 12-13 Uhr, 19-20 Uhr
+    
+    Wer testet es diese Woche? 🚀
+    
+    #socialmediatips #engagement #timing #marketinghack"
   `;
   
   const result = await runAgent(null as any, prompt);
+  postCounter++;
   return parseSimpleResponse(result);
 }
 
@@ -234,26 +316,38 @@ async function generateTrendPost(): Promise<string> {
 }
 
 async function generateMotivationalPost(): Promise<string> {
+  const style = MOTIVATIONAL_STYLES[Math.floor(Math.random() * MOTIVATIONAL_STYLES.length)];
+  const dayOfWeek = new Date().toLocaleDateString('de-DE', { weekday: 'long' });
+  
   const prompt = `
-    Erstelle einen motivierenden Post für Unternehmer/Marketing-Manager.
+    Erstelle einen motivierenden ${dayOfWeek}-Post mit Fokus auf: "${style}"
     
-    Themen: Durchhaltevermögen, Innovation, Kundenzentrierung, Team-Building
-    
-    Stil:
+    Anforderungen:
+    - 300-400 Zeichen
+    - Business-relevant für Unternehmer/Marketing-Manager
     - Inspirierend aber nicht kitschig
-    - Business-relevant
-    - Deutsch, max 250 Zeichen
     - Regt zum Nachdenken an
-    - Mit Hashtags
+    - Bezug zu aktueller Jahreszeit/Datum
     
-    Format:
-    "💪 [Motivierende Botschaft]
+    Stil-Optionen (wähle eine):
+    1. Persönliche Reflektion + Business-Lesson
+    2. Herausforderung + Lösungsansatz
+    3. Erfolgs-Mindset + praktischer Rat
+    4. Team-Gedanke + Umsetzungs-Tipp
     
-    [Praktischer Bezug zum Business]
+    Unterschiedliche Emojis verwenden:
+    - 💪🚀🎯⚡🌟💫🔥✨🎪🎭
     
-    Wie seht ihr das? 💭
+    Beispiel-Output:
+    "⚡ ${dayOfWeek}-Gedanke: Die besten Marketing-Ideen entstehen oft in den ruhigen Momenten.
     
-    #motivation #unternehmer #mindset"
+    🤔 Letzte Woche beim Kaffee: Plötzlich die Lösung für ein 3-Monate-altes Client-Problem.
+    
+    💡 Mein Learning: Bewusst Pausen einbauen. Das Gehirn braucht Leerlauf für Kreativität.
+    
+    Wann hattet ihr eure beste Idee? ☕
+    
+    #kreativität #pausenpower #marketingmindset #ideenfindung"
   `;
   
   const result = await runAgent(null as any, prompt);
