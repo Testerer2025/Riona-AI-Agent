@@ -201,19 +201,33 @@ async function ensureImageExists(postContent?: string): Promise<string> {
 
 function determineImageCategory(postContent: string): string {
   const content = postContent.toLowerCase();
+  let bestMatch = { category: 'default', matchCount: 0, keywords: [] as string[] };
   
-  // Durchsuche alle Kategorien nach passenden Keywords
   for (const category of imageCategories) {
+    let matchCount = 0;
+    const foundKeywords: string[] = [];
+    
+    // Zähle alle Keyword-Treffer in dieser Kategorie
     for (const keyword of category.keywords) {
       if (content.includes(keyword.toLowerCase())) {
-        logger.info(`Keyword "${keyword}" gefunden, verwende Kategorie: ${category.folder}`);
-        return category.folder;
+        matchCount++;
+        foundKeywords.push(keyword);
       }
+    }
+    
+    // Log für Debug
+    if (matchCount > 0) {
+      logger.info(`Kategorie "${category.folder}": ${matchCount} Treffer [${foundKeywords.join(', ')}]`);
+    }
+    
+    // Neue beste Kategorie gefunden?
+    if (matchCount > bestMatch.matchCount) {
+      bestMatch = { category: category.folder, matchCount, keywords: foundKeywords };
     }
   }
   
-  logger.info("Keine spezifische Kategorie gefunden, verwende default");
-  return 'default';
+  logger.info(`✅ Gewählt: ${bestMatch.category} mit ${bestMatch.matchCount} Treffern: [${bestMatch.keywords.join(', ')}]`);
+  return bestMatch.category;
 }
 
 async function getRandomImageFromCategory(category: string): Promise<string> {
