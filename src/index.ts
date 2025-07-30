@@ -3,14 +3,22 @@ import logger from "./config/logger";
 import { shutdown } from "./services";
 import app from "./app";
 import { initAgent } from "./Agent/index";
+import { connectDB } from "./config/db";  // ← HINZUFÜGEN
 
 dotenv.config();
 
 async function startServer() {
   try {
+    // ✅ ZUERST MongoDB verbinden:
+    await connectDB();
+    logger.info("✅ Database connection established");
+    
+    // DANN den Agent initialisieren:
     await initAgent();
+    logger.info("✅ Agent initialized");
+    
   } catch (err) {
-    logger.error("Error during agent initialization:", err);
+    logger.error("Error during startup:", err);
     process.exit(1);
   }
 
