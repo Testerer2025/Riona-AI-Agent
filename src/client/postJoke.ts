@@ -3,6 +3,8 @@ import path from "path";
 import { generateJoke } from "../Agent/joke";
 import logger from "../config/logger";
 import fs from 'fs';
+import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 interface ImageCategory {
   keywords: string[];
@@ -36,11 +38,163 @@ const imageCategories: ImageCategory[] = [
   },
 ];
 
+// MongoDB Schema für Posts
+const PostSchema = new mongoose.Schema({
+  content: { type: String, required: true },
+  content_hash: { type: String, required: true, unique: true },
+  image_name: { type: String, required: true },
+  image_path: { type: String, required: true },
+  posted_at: { type: Date, default: Date.now },
+  post_type: { type: String, default: 'instagram_post' },
+  success: { type: Boolean, default: true },
+  similarity_score: { type: Number, default: 0 }
+});
+
+const Post = mongoose.model('Post', PostSchema);
+
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Klickt im aktuell offenen Instagram‑Dialog das erste sichtbare
- *  Button‑Element, dessen Text ODER aria‑label eines der Suchwörter enthält.  */
+// Text-Ähnlichkeit berechnen (Jaccard-Ähnlichkeit)
+function calculateSimilarity(text1: string, text2: string): number {
+  // Entferne Hashtags und Emojis für besseren Vergleich
+  const clean1 = text1.replace(/#\w+/g, '').replace(/[^\w\s]/g, '').toLowerCase();
+  const clean2 = text2.replace(/#\w+/g, '').replace(/[^\w\s]/g, '').toLowerCase();
+  
+  const words1 = new Set(clean1.split(/\s+/).filter(word => word.length > 2));
+  const words2 = new Set(clean2.split(/\s+/).filter(word => word.length > 2));
+  
+  const intersection = new Set([...words1].filter(word => words2.has(word)));
+  const union = new Set([...words1, ...words2]);
+  
+  return intersection.size / union.size;
+}
+
+// Prüfe auf ähnliche Posts und Bild-Duplikate
+async function checkPostAndImageDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+  try {
+    const contentHash = crypto.createHash('md5').update(content).digest('hex');
+    const imageName = path.basename(imagePath);
+    
+    // 1. Prüfe auf exakte Content-Duplikate (Hash)
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    if (exactDuplicate) {
+      logger.warn("❌ Exakter Post-Duplikat gefunden");
+      return { isValid: false, reason: 'exact_content_duplicate' };
+    }
+    
+    // 2. Prüfe die letzten 10 Posts auf Ähnlichkeit
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(10)
+      .select('content image_name posted_at');
+    
+    for (const post of recentPosts) {
+      const similarity = calculateSimilarity(content, post.content);
+      if (similarity > 0.7) { // 70% Ähnlichkeit
+        logger.warn(`❌ Ähnlicher Post gefunden (${Math.round(similarity * 100)}% ähnlich)`);
+        logger.warn(`Alter Post: "${post.content.substring(0, 50)}..."`);
+        return { isValid: false, reason: 'similar_content' };
+      }
+    }
+    
+    // 3. Prüfe die letzten 2 Posts auf gleiches Bild
+    const lastTwoPosts = recentPosts.slice(0, 2);
+    for (const post of lastTwoPosts) {
+      if (post.image_name === imageName) {
+        logger.warn(`❌ Gleiches Bild wie vor ${lastTwoPosts.indexOf(post) + 1} Post(s) verwendet: ${imageName}`);
+        return { isValid: false, reason: 'duplicate_image' };
+      }
+    }
+    
+    logger.info("✅ Post und Bild sind einzigartig - kann gepostet werden");
+    return { isValid: true };
+    
+  } catch (error) {
+    logger.error("Fehler bei Duplikat-Check:", error);
+    // Bei Fehler erlaube Posting (failsafe)
+    return { isValid: true };
+  }
+}
+
+// Speichere Post in MongoDB
+async function savePostToDatabase(content: string, imagePath: string): Promise<void> {
+  try {
+    const contentHash = crypto.createHash('md5').update(content).digest('hex');
+    const imageName = path.basename(imagePath);
+    
+    const post = new Post({
+      content: content,
+      content_hash: contentHash,
+      image_name: imageName,
+      image_path: imagePath,
+      posted_at: new Date(),
+      post_type: 'instagram_post',
+      success: true
+    });
+    
+    await post.save();
+    logger.info(`✅ Post in MongoDB gespeichert - Image: ${imageName}`);
+    logger.info(`📊 Content Hash: ${contentHash.substring(0, 8)}...`);
+    
+  } catch (error) {
+    logger.error("❌ MongoDB-Speicherung fehlgeschlagen:", error);
+    // Nicht werfen - Post war erfolgreich, auch wenn Speicherung fehlschlägt
+  }
+}
+
+// Generiere neue Post-Variation bei Duplikaten
+async function generateUniquePost(maxRetries: number = 3): Promise<{content: string, imagePath: string}> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      logger.info(`📝 Generiere Post-Versuch ${attempt}/${maxRetries}...`);
+      
+      const content = await generateJoke();
+      const jokeContent = Array.isArray(content) ? content[0]?.witz ?? "" : (content as string);
+      
+      let imagePath = await ensureImageExists(jokeContent);
+      
+      // Prüfe auf Duplikate
+      const validation = await checkPostAndImageDuplicates(jokeContent, imagePath);
+      
+      if (validation.isValid) {
+        logger.info(`✅ Einzigartiger Post nach ${attempt} Versuch(en) generiert`);
+        return { content: jokeContent, imagePath };
+      }
+      
+      // Bei Bild-Duplikat: Versuche anderes Bild aus derselben Kategorie
+      if (validation.reason === 'duplicate_image') {
+        logger.info("🔄 Versuche anderes Bild aus derselben Kategorie...");
+        const category = determineImageCategory(jokeContent);
+        imagePath = await getRandomImageFromCategory(category);
+        
+        const recheck = await checkPostAndImageDuplicates(jokeContent, imagePath);
+        if (recheck.isValid) {
+          logger.info("✅ Anderes Bild erfolgreich gewählt");
+          return { content: jokeContent, imagePath };
+        }
+      }
+      
+      logger.warn(`⚠️ Versuch ${attempt} fehlgeschlagen: ${validation.reason}`);
+      
+      // Bei letztem Versuch: Akzeptiere es trotzdem
+      if (attempt === maxRetries) {
+        logger.warn("⚠️ Max. Versuche erreicht - verwende letzten generierten Post");
+        return { content: jokeContent, imagePath };
+      }
+      
+      // Kurz warten vor nächstem Versuch
+      await delay(2000);
+      
+    } catch (error) {
+      logger.error(`Fehler bei Post-Generierung Versuch ${attempt}:`, error);
+      if (attempt === maxRetries) throw error;
+    }
+  }
+  
+  throw new Error("Konnte keinen einzigartigen Post generieren");
+}
+
 /** Klickt WEITER-Buttons (nicht Share!) */
 async function clickNextButton(page: Page, timeout = 20_000) {
   try {
@@ -132,15 +286,12 @@ async function clickShareButton(page: Page): Promise<void> {
   logger.info("✅ Share‑Button geklickt, warte auf Dialog‑Verschwinden…");
 
   /* 3. Bestätigung: Dialog verschwindet oder Feed lädt neu */
-await page.waitForFunction(
-  () => location.pathname === '/'                              // zurück im Feed
-     || !!document.querySelector('[data-testid="upload-flow-success-toast"]'),
-  { timeout: 60_000 }
-);
-
+  await page.waitForFunction(
+    () => location.pathname === '/'                              // zurück im Feed
+       || !!document.querySelector('[data-testid="upload-flow-success-toast"]'),
+    { timeout: 60_000 }
+  );
 }
-
-
 
 async function findAndFillCaption(page: Page, text: string): Promise<void> {
   logger.info(`Versuche Caption einzugeben: "${text.slice(0, 100)}…"`);
@@ -166,8 +317,6 @@ async function findAndFillCaption(page: Page, text: string): Promise<void> {
   const current = await page.evaluate(s => document.querySelector<HTMLElement>(s)?.innerText || "", sel);
   logger.info(`Caption‑Länge nach Eingabe: ${current.length}`);
 }
-
-
 
 // Erweiterte ensureImageExists Funktion
 async function ensureImageExists(postContent?: string): Promise<string> {
@@ -226,7 +375,12 @@ function determineImageCategory(postContent: string): string {
     }
   }
   
-  logger.info(`✅ Gewählt: ${bestMatch.category} mit ${bestMatch.matchCount} Treffern: [${bestMatch.keywords.join(', ')}]`);
+  if (bestMatch.matchCount > 0) {
+    logger.info(`✅ Gewählt: ${bestMatch.category} mit ${bestMatch.matchCount} Treffern: [${bestMatch.keywords.join(', ')}]`);
+  } else {
+    logger.info("Keine Keywords gefunden, verwende default");
+  }
+  
   return bestMatch.category;
 }
 
@@ -272,7 +426,6 @@ async function getRandomImageFromCategory(category: string): Promise<string> {
   logger.info(`Gewähltes Bild: ${selectedImage} aus Kategorie ${category}`);
   return imagePath;
 }
-
 
 async function createCategoryFolders(): Promise<void> {
   const baseDir = path.resolve("assets");
@@ -330,18 +483,13 @@ export { ensureImageExists };
 
 export async function postJoke(page: Page) {
   try {
-    logger.info("Starte Post-Erstellung...");
+    logger.info("🚀 Starte Post-Erstellung mit Duplikat-Check...");
 
-    /* ░░ 0) Witz holen ░░ */
-    const joke = await generateJoke();
-    logger.info(`Neuer Witz generiert: ${JSON.stringify(joke)}`);
-
-    /* ░░ 0.1) jokeContent FRÜHER definieren ░░ */
-    const jokeContent = Array.isArray(joke) ? joke[0]?.witz ?? "" : (joke as string);
-    logger.info(`Vollständiger Caption-Text: "${jokeContent}"`);
-
-    /* ░░ 0.2) JETZT Bild mit jokeContent auswählen ░░ */
-    const imagePath = await ensureImageExists(jokeContent); // ✅ Jetzt funktioniert es!
+    /* ░░ 0) Generiere einzigartigen Post und Bild ░░ */
+    const { content: jokeContent, imagePath } = await generateUniquePost();
+    
+    logger.info(`📝 Finaler Post-Text: "${jokeContent.substring(0, 100)}..."`);
+    logger.info(`🖼️ Gewähltes Bild: ${path.basename(imagePath)}`);
 
     /* ░░ 1) Instagram‑Startseite ░░ */
     await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
@@ -403,7 +551,7 @@ export async function postJoke(page: Page) {
     try {
       for (let i = 0; i < 2; i++) {
         logger.info(`Klicke Weiter-Button ${i + 1}/2`);
-        await clickNextButton(page); // Verwende die neue Funktion!
+        await clickNextButton(page);
         await delay(2000);
       }
     } catch (error) {
@@ -412,22 +560,21 @@ export async function postJoke(page: Page) {
     }
 
    /* ░░ 5) Caption eingeben ░░ */
-logger.info("Beginne Caption-Eingabe...");
-// jokeContent ist bereits oben definiert - einfach verwenden:
-await findAndFillCaption(page, jokeContent);
+    logger.info("Beginne Caption-Eingabe...");
+    await findAndFillCaption(page, jokeContent);
 
-// WICHTIG: Länger warten damit Instagram den Text erkennt
-logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
-await delay(5000);
+    // WICHTIG: Länger warten damit Instagram den Text erkennt
+    logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
+    await delay(5000);
 
-// Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
-try {
-  await page.click('div[contenteditable="true"][aria-label*="caption"]');
-  logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
-  await delay(1000);
-} catch (e) {
-  logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
-}
+    // Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
+    try {
+      await page.click('div[contenteditable="true"][aria-label*="caption"]');
+      logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
+      await delay(1000);
+    } catch (e) {
+      logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
+    }
 
     // DEBUG: Screenshot - einfach ins Hauptverzeichnis
     const screenshotPath = `debug_${Date.now()}.png`;
@@ -454,11 +601,11 @@ try {
       logger.info(`PRE-SHARE CHECK - Hat Text: ${preShareCheck.hasText}, Länge: ${preShareCheck.textLength}`);
       logger.info(`PRE-SHARE TEXT: "${preShareCheck.textContent}"`);
       
-      await clickShareButton(page); // Verwende die neue Funktion!
+      await clickShareButton(page);
       
       // Warten auf Bestätigung - LÄNGER warten
       logger.info("Warte 15 Sekunden auf Upload-Completion...");
-      await delay(15000); // Länger warten für Upload
+      await delay(15000);
       
       // DEBUG: Nach dem Share - prüfe ob Dialog verschwunden oder Fehler aufgetreten
       const postShareStatus = await page.evaluate(() => {
@@ -493,6 +640,10 @@ try {
       try {
         await page.waitForSelector('div[role="dialog"]', { timeout: 3000, hidden: true });
         logger.info("✅ Post erfolgreich geteilt - Dialog verschwunden!");
+        
+        // ✅✅ NEU: Post in MongoDB speichern NACH erfolgreichem Posting
+        await savePostToDatabase(jokeContent, imagePath);
+        
       } catch (e) {
         logger.warn("⚠️ Dialog noch sichtbar - Post möglicherweise nicht erfolgreich");
         
@@ -506,6 +657,9 @@ try {
         });
         
         logger.info(`Verbleibende Dialog-Inhalte: ${JSON.stringify(dialogContent)}`);
+        
+        // Speichere trotzdem - könnte erfolgreich gewesen sein
+        await savePostToDatabase(jokeContent, imagePath);
       }
       
     } catch (error) {
