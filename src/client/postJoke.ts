@@ -123,7 +123,7 @@ async function checkPostSimilarityWithAI(newPost: string, recentPosts: any[]): P
     }
     
     // Analysiere AI-Ergebnis
-    const isTooSimilar = analysis.is_too_similar || analysis.similarity_score > 60;
+    const isTooSimilar = analysis.is_too_similar || analysis.similarity_score > 75;
     
     if (isTooSimilar) {
       console.warn(`🤖 AI erkannte ${analysis.similarity_score}% Ähnlichkeit`);
@@ -266,18 +266,30 @@ async function generateImprovedPost(rejectionReasons: string[]): Promise<string>
 
 // Parse AI Response (wie in deiner ursprünglichen joke.ts)
 function parseSimpleResponse(response: any): string {
-  try {
+    try {
     if (Array.isArray(response)) {
-      // ✅ ERWEITERT - alle möglichen Feldnamen:
+      // ✅ Alle bekannten Feldnamen:
       if (response[0]?.instagram_post) return response[0].instagram_post;
-      if (response[0]?.friday_post) return response[0].friday_post;        // ← NEU!
-      if (response[0]?.motivational_post) return response[0].motivational_post; // ← NEU!
-      if (response[0]?.agency_post) return response[0].agency_post;        // ← NEU!
-      if (response[0]?.tip_post) return response[0].tip_post;              // ← NEU!
-      if (response[0]?.witz) return response[0].witz;
-      if (response[0]?.joke) return response[0].joke;
       if (response[0]?.content) return response[0].content;
       if (response[0]?.post) return response[0].post;
+      if (response[0]?.witz) return response[0].witz;
+      
+      // ✅ NEU - Research-spezifische Felder:
+      if (response[0]?.["Eine interessante aktuelle Entwicklung"]) {
+        return response[0]["Eine interessante aktuelle Entwicklung"];
+      }
+      
+      // ✅ UNIVERSAL-FALLBACK - nimm ersten String-Wert:
+      const firstObject = response[0];
+      if (typeof firstObject === 'object' && firstObject !== null) {
+        const values = Object.values(firstObject);
+        const firstString = values.find(val => typeof val === 'string' && val.length > 10);
+        if (firstString) {
+          console.log("✅ Verwende ersten gefundenen String-Wert");
+          return firstString;
+        }
+      }
+      
       if (typeof response[0] === "string") return response[0];
     }
     
@@ -318,8 +330,8 @@ function parseSimpleResponse(response: any): string {
     }
     
     // ✅ BESSERES DEBUGGING:
-    console.log("Unerwartetes Datenformat:", JSON.stringify(response));
-    console.log("Verfügbare Felder:", Object.keys(response[0] || response));
+     console.log("Unerwartetes Datenformat:", JSON.stringify(response));
+    console.log("Verfügbare Felder:", response[0] ? Object.keys(response[0]) : 'keine');
     
     // ✅ INTELLIGENTER FALLBACK - verwende ersten String-Wert:
     if (Array.isArray(response) && response[0] && typeof response[0] === 'object') {
