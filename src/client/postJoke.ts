@@ -83,17 +83,18 @@ async function checkPostAndImageDuplicates(content: string, imagePath: string): 
       return { isValid: false, reason: 'exact_content_duplicate' };
     }
     
-    // 2. Prüfe die letzten 10 Posts auf Ähnlichkeit
+    // 2. Prüfe die letzten 30 Posts auf Ähnlichkeit
     const recentPosts = await Post.find()
       .sort({ posted_at: -1 })
-      .limit(10)
+      .limit(30)
       .select('content image_name posted_at');
     
     for (const post of recentPosts) {
       const similarity = calculateSimilarity(content, post.content);
       if (similarity > 0.7) { // 70% Ähnlichkeit
         logger.warn(`❌ Ähnlicher Post gefunden (${Math.round(similarity * 100)}% ähnlich)`);
-        logger.warn(`Alter Post: "${post.content.substring(0, 50)}..."`);
+        logger.warn(`Neuer Post: "${content.substring(0, 100)}..."`);
+        logger.warn(`Alter Post: "${post.content.substring(0, 100)}..." (vom ${post.posted_at.toLocaleDateString()})`);
         return { isValid: false, reason: 'similar_content' };
       }
     }
@@ -124,7 +125,7 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     const imageName = path.basename(imagePath);
     
     const post = new Post({
-      content: content,
+      content: content, // Vollständiger Content wird gespeichert
       content_hash: contentHash,
       image_name: imageName,
       image_path: imagePath,
@@ -134,11 +135,30 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     });
     
     await post.save();
-    logger.info(`✅ Post in MongoDB gespeichert - Image: ${imageName}`);
-    logger.info(`📊 Content Hash: ${contentHash.substring(0, 8)}...`);
+    
+    // Bessere Logs mit vollständigem Content
+    logger.info(`✅ Post in MongoDB gespeichert:`);
+    logger.info(`📝 Content (${content.length} Zeichen): "${content}"`);
+    logger.info(`🖼️ Image: ${imageName}`);
+    logger.info(`🔗 Hash: ${contentHash.substring(0, 12)}...`);
+    
+    // Verifikation: Lese den gespeicherten Post nochmal aus
+    const savedPost = await Post.findOne({ content_hash: contentHash }).select('content');
+    if (savedPost) {
+      logger.info(`✓ Verifikation: Gespeichert (${savedPost.content.length} Zeichen)`);
+      if (savedPost.content !== content) {
+        logger.error(`❌ WARNUNG: Gespeicherter Content unterscheidet sich!`);
+        logger.error(`Original: "${content}"`);
+        logger.error(`Gespeichert: "${savedPost.content}"`);
+      }
+    }
     
   } catch (error) {
     logger.error("❌ MongoDB-Speicherung fehlgeschlagen:", error);
+    
+    // Debug: Zeige was versucht wurde zu speichern
+    logger.error(`Versuchte zu speichern: "${content}" (${content.length} Zeichen)`);
+    
     // Nicht werfen - Post war erfolgreich, auch wenn Speicherung fehlschlägt
   }
 }
