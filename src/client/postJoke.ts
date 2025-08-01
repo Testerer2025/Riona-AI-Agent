@@ -268,7 +268,12 @@ async function generateImprovedPost(rejectionReasons: string[]): Promise<string>
 function parseSimpleResponse(response: any): string {
   try {
     if (Array.isArray(response)) {
+      // ✅ ERWEITERT - alle möglichen Feldnamen:
       if (response[0]?.instagram_post) return response[0].instagram_post;
+      if (response[0]?.friday_post) return response[0].friday_post;        // ← NEU!
+      if (response[0]?.motivational_post) return response[0].motivational_post; // ← NEU!
+      if (response[0]?.agency_post) return response[0].agency_post;        // ← NEU!
+      if (response[0]?.tip_post) return response[0].tip_post;              // ← NEU!
       if (response[0]?.witz) return response[0].witz;
       if (response[0]?.joke) return response[0].joke;
       if (response[0]?.content) return response[0].content;
@@ -277,7 +282,12 @@ function parseSimpleResponse(response: any): string {
     }
     
     if (typeof response === "object" && response !== null) {
+      // ✅ ERWEITERT - alle möglichen Feldnamen:
       if (response.instagram_post) return String(response.instagram_post);
+      if (response.friday_post) return String(response.friday_post);        // ← NEU!
+      if (response.motivational_post) return String(response.motivational_post); // ← NEU!
+      if (response.agency_post) return String(response.agency_post);        // ← NEU!
+      if (response.tip_post) return String(response.tip_post);              // ← NEU!
       if (response.witz) return String(response.witz);
       if (response.Witz) return String(response.Witz);
       if (response.joke) return String(response.joke);
@@ -292,10 +302,14 @@ function parseSimpleResponse(response: any): string {
         if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
           return parsed[0].instagram_post;
         }
+        if (Array.isArray(parsed) && parsed[0]?.friday_post) {          // ← NEU!
+          return parsed[0].friday_post;
+        }
         if (Array.isArray(parsed) && parsed[0]?.witz) {
           return parsed[0].witz;
         }
         if (parsed?.instagram_post) return parsed.instagram_post;
+        if (parsed?.friday_post) return parsed.friday_post;            // ← NEU!
         if (parsed?.witz) return parsed.witz;
         return response;
       } catch {
@@ -303,7 +317,19 @@ function parseSimpleResponse(response: any): string {
       }
     }
     
+    // ✅ BESSERES DEBUGGING:
     console.log("Unerwartetes Datenformat:", JSON.stringify(response));
+    console.log("Verfügbare Felder:", Object.keys(response[0] || response));
+    
+    // ✅ INTELLIGENTER FALLBACK - verwende ersten String-Wert:
+    if (Array.isArray(response) && response[0] && typeof response[0] === 'object') {
+      const firstValue = Object.values(response[0])[0];
+      if (typeof firstValue === 'string') {
+        console.log("Verwende ersten String-Wert als Fallback:", firstValue.substring(0, 100));
+        return firstValue;
+      }
+    }
+    
     return getBackupPost();
     
   } catch (error) {
