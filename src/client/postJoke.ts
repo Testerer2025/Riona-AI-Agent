@@ -1,6 +1,7 @@
 import { Page } from "puppeteer";
 import path from "path";
 import { generateJoke } from "../Agent/joke";
+import { runAgent } from "../Agent/index";
 import logger from "../config/logger";
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -55,70 +56,100 @@ const Post = mongoose.model('Post', PostSchema);
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Text-Ähnlichkeit berechnen (Jaccard-Ähnlichkeit + Themen-Erkennung)
-function calculateSimilarity(text1: string, text2: string): number {
-  // Entferne Hashtags und Emojis für besseren Vergleich
-  const clean1 = text1.replace(/#\w+/g, '').replace(/[^\w\s]/g, '').toLowerCase();
-  const clean2 = text2.replace(/#\w+/g, '').replace(/[^\w\s]/g, '').toLowerCase();
-  
-  const words1 = new Set(clean1.split(/\s+/).filter(word => word.length > 2));
-  const words2 = new Set(clean2.split(/\s+/).filter(word => word.length > 2));
-  
-  // Basis Jaccard-Ähnlichkeit
-  const intersection = new Set([...words1].filter(word => words2.has(word)));
-  const union = new Set([...words1, ...words2]);
-  const jaccardSimilarity = intersection.size / union.size;
-  
-  // Erkenne thematische Ähnlichkeiten
-  const thematicSimilarity = calculateThematicSimilarity(text1, text2);
-  
-  // Kombiniere beide Scores (Jaccard 60%, Thematic 40%)
-  const finalScore = (jaccardSimilarity * 0.6) + (thematicSimilarity * 0.4);
-  
-  return finalScore;
-}
-
-// Neue Funktion: Thematische Ähnlichkeit
-function calculateThematicSimilarity(text1: string, text2: string): number {
-  const themes = {
-    wochentage: ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonntag', 'woche'],
-    jahreszeiten: ['frühling', 'sommer', 'herbst', 'winter', 'jahreszeit'],
-    geschäft: ['unternehmer', 'business', 'erfolg', 'strategie', 'innovation', 'wachstum', 'führung'],
-    motivation: ['motivation', 'inspiration', 'mut', 'fokus', 'ziel', 'träume', 'vision'],
-    marketing: ['marketing', 'content', 'social media', 'kampagne', 'branding', 'reichweite'],
-    feste: ['weihnachten', 'ostern', 'neujahr', 'geburtstag', 'jubiläum', 'feier'],
-    tageszeiten: ['morgen', 'mittag', 'abend', 'nacht', 'früh', 'spät'],
-    emotionen: ['freude', 'liebe', 'angst', 'hoffnung', 'stolz', 'glück', 'zufrieden']
-  };
-  
-  const text1Lower = text1.toLowerCase();
-  const text2Lower = text2.toLowerCase();
-  
-  let sharedThemes = 0;
-  let totalThemes = 0;
-  
-  for (const [themeName, keywords] of Object.entries(themes)) {
-    const hasTheme1 = keywords.some(keyword => text1Lower.includes(keyword));
-    const hasTheme2 = keywords.some(keyword => text2Lower.includes(keyword));
-    
-    if (hasTheme1 || hasTheme2) {
-      totalThemes++;
-      if (hasTheme1 && hasTheme2) {
-        sharedThemes++;
-        
-        // Extra Penalty für gleiche spezifische Kombinationen
-        if (themeName === 'wochentage' && themeName === 'jahreszeiten') {
-          sharedThemes += 0.5; // "Freitag + Herbst" = Extra ähnlich
-        }
-      }
+// AI-basierte Ähnlichkeitsprüfung
+async function checkPostSimilarityWithAI(newPost: string, recentPosts: any[]): Promise<{isValid: boolean, reason?: string, similarPost?: string}> {
+  try {
+    // Wenn keine Posts vorhanden, ist alles OK
+    if (recentPosts.length === 0) {
+      return { isValid: true };
     }
+    
+    // Bereite Kontext für AI vor
+    const recentPostsText = recentPosts.map((post, index) => 
+      `Post ${index + 1} (${Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24))} Tage alt): "${post.content}"`
+    ).join('\n\n');
+    
+    const aiPrompt = `
+    Du bist ein Experte für Content-Analyse. Prüfe ob der neue Post zu ähnlich zu den vorherigen Posts ist.
+    
+    NEUER POST:
+    "${newPost}"
+    
+    VORHERIGE POSTS (letzte 30):
+    ${recentPostsText}
+    
+    Analysiere diese Aspekte:
+    1. Thematische Überschneidungen (gleiche Konzepte, auch wenn anders formuliert)
+    2. Strukturelle Ähnlichkeiten (gleicher Aufbau, gleiche Emojis/Symbole)
+    3. Zeitliche Bezüge (gleiche Wochentage, Jahreszeiten, Feiertage)
+    4. Motivational-Pattern (ähnliche Ermutigungsformeln)
+    5. Inhaltliche Wiederholungen (gleiche Tipps, Ratschläge)
+    6. Sprachliche Muster (wiederkehrende Phrasen, Wörter)
+    
+    BEWERTUNG:
+    - ERLAUBT: Wenn der neue Post frische Perspektiven, andere Themen oder völlig anderen Ansatz hat
+    - ÄHNLICH: Wenn 2+ der oberen Aspekte stark übereinstimmen
+    - SEHR ÄHNLICH: Wenn der Post im Grunde das Gleiche aussagt, nur anders formuliert
+    
+    Antworte in diesem JSON-Format:
+    {
+      "similarity_score": <0-100 Prozent>,
+      "is_too_similar": <true/false>,
+      "main_similarities": ["Aspekt 1", "Aspekt 2"],
+      "most_similar_post": "Post X (Y Tage alt)",
+      "recommendation": "Kurze Begründung"
+    }
+    
+    Sei streng bei der Bewertung - Variation ist wichtiger als Konsistenz.
+    `;
+    
+    console.log("🤖 Führe AI-Ähnlichkeitsanalyse durch...");
+    const aiResponse = await runAgent(null as any, aiPrompt);
+    
+    // Parse AI Response
+    let analysis;
+    try {
+      // Versuche JSON zu parsen
+      const responseText = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysis = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error("Kein JSON gefunden");
+      }
+    } catch (parseError) {
+      console.warn("AI-Response konnte nicht geparst werden, verwende Fallback");
+      return { isValid: true }; // Failsafe
+    }
+    
+    // Analysiere AI-Ergebnis
+    const isTooSimilar = analysis.is_too_similar || analysis.similarity_score > 60;
+    
+    if (isTooSimilar) {
+      console.warn(`🤖 AI erkannte ${analysis.similarity_score}% Ähnlichkeit`);
+      console.warn(`📋 Ähnlichkeiten: ${analysis.main_similarities?.join(', ')}`);
+      console.warn(`📄 Ähnlichster Post: ${analysis.most_similar_post}`);
+      console.warn(`💡 Empfehlung: ${analysis.recommendation}`);
+      
+      return {
+        isValid: false,
+        reason: 'ai_detected_similarity',
+        similarPost: analysis.most_similar_post
+      };
+    }
+    
+    console.log(`✅ AI-Check bestanden (${analysis.similarity_score}% Ähnlichkeit)`);
+    return { isValid: true };
+    
+  } catch (error) {
+    console.error("Fehler bei AI-Ähnlichkeitsprüfung:", error);
+    // Failsafe: Bei Fehler erlaube Posting
+    return { isValid: true };
   }
-  
-  return totalThemes > 0 ? sharedThemes / totalThemes : 0;
 }
 
-// Prüfe auf ähnliche Posts und Bild-Duplikate
-async function checkPostAndImageDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+// Erweiterte Duplikat-Prüfung mit AI
+async function checkPostAndImageDuplicatesWithAI(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
   try {
     const contentHash = crypto.createHash('md5').update(content).digest('hex');
     const imageName = path.basename(imagePath);
@@ -130,36 +161,33 @@ async function checkPostAndImageDuplicates(content: string, imagePath: string): 
       return { isValid: false, reason: 'exact_content_duplicate' };
     }
     
-    // 2. Prüfe die letzten 30 Posts auf Ähnlichkeit
+    // 2. Lade die letzten 30 Posts für AI-Analyse
     const recentPosts = await Post.find()
       .sort({ posted_at: -1 })
       .limit(30)
       .select('content image_name posted_at');
     
-    for (const post of recentPosts) {
-      const similarity = calculateSimilarity(content, post.content);
-      if (similarity > 0.5) { // Reduziert von 70% auf 50%
-        logger.warn(`❌ Ähnlicher Post gefunden (${Math.round(similarity * 100)}% ähnlich)`);
-        logger.warn(`Neuer Post: "${content.substring(0, 100)}..."`);
-        logger.warn(`Alter Post: "${post.content.substring(0, 100)}..." (vom ${post.posted_at.toLocaleDateString()})`);
-        return { isValid: false, reason: 'similar_content' };
-      }
+    // 3. AI-basierte Ähnlichkeitsprüfung
+    const aiSimilarityCheck = await checkPostSimilarityWithAI(content, recentPosts);
+    
+    if (!aiSimilarityCheck.isValid) {
+      return { isValid: false, reason: aiSimilarityCheck.reason };
     }
     
-    // 3. Prüfe die letzten 2 Posts auf gleiches Bild
-    const lastTwoPosts = recentPosts.slice(0, 2);
-    for (const post of lastTwoPosts) {
+    // 4. Prüfe die letzten 3 Posts auf gleiches Bild
+    const lastThreePosts = recentPosts.slice(0, 3);
+    for (const post of lastThreePosts) {
       if (post.image_name === imageName) {
-        logger.warn(`❌ Gleiches Bild wie vor ${lastTwoPosts.indexOf(post) + 1} Post(s) verwendet: ${imageName}`);
+        logger.warn(`❌ Gleiches Bild wie vor ${lastThreePosts.indexOf(post) + 1} Post(s) verwendet: ${imageName}`);
         return { isValid: false, reason: 'duplicate_image' };
       }
     }
     
-    logger.info("✅ Post und Bild sind einzigartig - kann gepostet werden");
+    logger.info("✅ Post und Bild sind einzigartig (AI + Hash + Bild-Check bestanden)");
     return { isValid: true };
     
   } catch (error) {
-    logger.error("Fehler bei Duplikat-Check:", error);
+    logger.error("Fehler bei erweiterten Duplikat-Check:", error);
     // Bei Fehler erlaube Posting (failsafe)
     return { isValid: true };
   }
@@ -172,7 +200,7 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     const imageName = path.basename(imagePath);
     
     const post = new Post({
-      content: content, // Vollständiger Content wird gespeichert
+      content: content,
       content_hash: contentHash,
       image_name: imageName,
       image_path: imagePath,
@@ -202,64 +230,173 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     
   } catch (error) {
     logger.error("❌ MongoDB-Speicherung fehlgeschlagen:", error);
-    
-    // Debug: Zeige was versucht wurde zu speichern
     logger.error(`Versuchte zu speichern: "${content}" (${content.length} Zeichen)`);
-    
-    // Nicht werfen - Post war erfolgreich, auch wenn Speicherung fehlschlägt
   }
 }
 
-// Generiere neue Post-Variation bei Duplikaten
-async function generateUniquePost(maxRetries: number = 3): Promise<{content: string, imagePath: string}> {
+// Generiere verbesserten Post basierend auf vorherigen Ablehnungen
+async function generateImprovedPost(rejectionReasons: string[]): Promise<string> {
+  const improvementPrompt = `
+    Der vorherige Post wurde abgelehnt. Erstelle einen komplett anderen Post mit diesen Verbesserungen:
+    
+    VERMEIDE DIESE PROBLEME (aus vorherigen Versuchen):
+    ${rejectionReasons.map(reason => `- ${reason}`).join('\n')}
+    
+    ERSTELLE EINEN VÖLLIG ANDEREN POST:
+    - Komplett anderes Thema
+    - Andere Struktur und Formulierung  
+    - Andere Emojis oder gar keine
+    - Anderer Tonfall (förmlicher/lockerer)
+    - Andere Perspektive (Kunde statt Agentur, Problem statt Lösung)
+    - Andere Post-Art (Frage statt Statement, Story statt Tipp)
+    
+    Anforderungen:
+    - 350-450 Zeichen für Instagram
+    - Professionell für Social Media Agentur
+    - Deutsch
+    - Bietet echten Mehrwert
+    - Ist einzigartig und frisch
+    
+    Fokussiere auf: Business-Strategien, Tool-Empfehlungen, Kundenbeziehungen, Branchenentwicklungen, oder Team-Insights.
+  `;
+  
+  const result = await runAgent(null as any, improvementPrompt);
+  return parseSimpleResponse(result);
+}
+
+// Parse AI Response (wie in deiner ursprünglichen joke.ts)
+function parseSimpleResponse(response: any): string {
+  try {
+    if (Array.isArray(response)) {
+      if (response[0]?.instagram_post) return response[0].instagram_post;
+      if (response[0]?.witz) return response[0].witz;
+      if (response[0]?.joke) return response[0].joke;
+      if (response[0]?.content) return response[0].content;
+      if (response[0]?.post) return response[0].post;
+      if (typeof response[0] === "string") return response[0];
+    }
+    
+    if (typeof response === "object" && response !== null) {
+      if (response.instagram_post) return String(response.instagram_post);
+      if (response.witz) return String(response.witz);
+      if (response.Witz) return String(response.Witz);
+      if (response.joke) return String(response.joke);
+      if (response.Joke) return String(response.Joke);
+      if (response.content) return String(response.content);
+      if (response.post) return String(response.post);
+    }
+    
+    if (typeof response === "string") {
+      try {
+        const parsed = JSON.parse(response);
+        if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
+          return parsed[0].instagram_post;
+        }
+        if (Array.isArray(parsed) && parsed[0]?.witz) {
+          return parsed[0].witz;
+        }
+        if (parsed?.instagram_post) return parsed.instagram_post;
+        if (parsed?.witz) return parsed.witz;
+        return response;
+      } catch {
+        return response;
+      }
+    }
+    
+    console.log("Unerwartetes Datenformat:", JSON.stringify(response));
+    return getBackupPost();
+    
+  } catch (error) {
+    console.error("Parse Error:", error);
+    return getBackupPost();
+  }
+}
+
+// Intelligente Post-Variation mit AI-Feedback
+async function generateUniquePostWithAI(maxRetries: number = 4): Promise<{content: string, imagePath: string}> {
+  let rejectionReasons: string[] = [];
+  
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      logger.info(`📝 Generiere Post-Versuch ${attempt}/${maxRetries}...`);
+      logger.info(`🎨 AI-gestützter Post-Versuch ${attempt}/${maxRetries}...`);
       
-      const content = await generateJoke();
+      // Bei weiteren Versuchen: Instruiere AI, vorherige Probleme zu vermeiden
+      let content: string;
+      if (attempt === 1) {
+        content = await generateJoke();
+      } else {
+        content = await generateImprovedPost(rejectionReasons);
+      }
+      
       const jokeContent = Array.isArray(content) ? content[0]?.witz ?? "" : (content as string);
-      
       let imagePath = await ensureImageExists(jokeContent);
       
-      // Prüfe auf Duplikate
-      const validation = await checkPostAndImageDuplicates(jokeContent, imagePath);
+      // Prüfe mit AI-verbesserter Duplikat-Erkennung
+      const validation = await checkPostAndImageDuplicatesWithAI(jokeContent, imagePath);
       
       if (validation.isValid) {
-        logger.info(`✅ Einzigartiger Post nach ${attempt} Versuch(en) generiert`);
+        logger.info(`✅ Einzigartiger Post nach ${attempt} AI-Versuch(en) generiert`);
         return { content: jokeContent, imagePath };
       }
       
-      // Bei Bild-Duplikat: Versuche anderes Bild aus derselben Kategorie
+      // Sammle Ablehnungsgründe für nächsten Versuch
+      rejectionReasons.push(validation.reason || 'unknown');
+      
+      // Bei Bild-Duplikat: Versuche anderes Bild
       if (validation.reason === 'duplicate_image') {
-        logger.info("🔄 Versuche anderes Bild aus derselben Kategorie...");
+        logger.info("🔄 Versuche anderes Bild...");
         const category = determineImageCategory(jokeContent);
         imagePath = await getRandomImageFromCategory(category);
         
-        const recheck = await checkPostAndImageDuplicates(jokeContent, imagePath);
+        const recheck = await checkPostAndImageDuplicatesWithAI(jokeContent, imagePath);
         if (recheck.isValid) {
           logger.info("✅ Anderes Bild erfolgreich gewählt");
           return { content: jokeContent, imagePath };
         }
       }
       
-      logger.warn(`⚠️ Versuch ${attempt} fehlgeschlagen: ${validation.reason}`);
+      logger.warn(`⚠️ AI-Versuch ${attempt} abgelehnt: ${validation.reason}`);
       
       // Bei letztem Versuch: Akzeptiere es trotzdem
       if (attempt === maxRetries) {
-        logger.warn("⚠️ Max. Versuche erreicht - verwende letzten generierten Post");
+        logger.warn("⚠️ Max. AI-Versuche erreicht - verwende letzten Post");
         return { content: jokeContent, imagePath };
       }
       
-      // Kurz warten vor nächstem Versuch
-      await delay(2000);
+      // Warten vor nächstem Versuch
+      await delay(3000);
       
     } catch (error) {
-      logger.error(`Fehler bei Post-Generierung Versuch ${attempt}:`, error);
+      logger.error(`Fehler bei AI-Post-Generierung Versuch ${attempt}:`, error);
       if (attempt === maxRetries) throw error;
     }
   }
   
-  throw new Error("Konnte keinen einzigartigen Post generieren");
+  throw new Error("Konnte keinen AI-validierten Post generieren");
+}
+
+function getBackupPost(): string {
+  const backupPosts = [
+    `🎯 Authentizität schlägt Perfektion. Jeden Tag.
+
+Was ist euer authentischster Marketing-Moment gewesen?
+
+#authentizität #realmarketing #storytelling #community`,
+
+    `⚡ Plot Twist: Die besten Kampagnen entstehen oft aus "gescheiterten" Ideen.
+
+Welche eurer verworfenen Ideen hätte vielleicht doch funktioniert?
+
+#kreativität #ideenfindung #kampagnenentwicklung #innovation`,
+
+    `🚀 Kleine Teams, große Wirkung: Manchmal ist weniger wirklich mehr.
+
+Was ist euer bestes Beispiel für effiziente Teamarbeit?
+
+#teamwork #effizienz #kleinesteams #grossewirkung`
+  ];
+  
+  return backupPosts[Math.floor(Math.random() * backupPosts.length)];
 }
 
 /** Klickt WEITER-Buttons (nicht Share!) */
@@ -267,7 +404,6 @@ async function clickNextButton(page: Page, timeout = 20_000) {
   try {
     logger.info(`Suche nach WEITER-Button...`);
     
-    // Nur nach "Weiter/Next" suchen, NICHT nach Share/Teilen!
     const nextButtonClicked = await page.evaluate(() => {
       const buttons = document.querySelectorAll('button, div[role="button"]');
       for (const btn of buttons) {
@@ -318,14 +454,12 @@ async function clickNextButton(page: Page, timeout = 20_000) {
 async function clickShareButton(page: Page): Promise<void> {
   logger.info("Warte auf aktivierten SHARE‑Button…");
 
-  /* 1. Zuerst den Upload‑Spinner abwarten – sonst bleibt der Button disabled */
   try {
     await page.waitForFunction(() => !document.querySelector('div[role="progressbar"]'), { timeout: 60_000 });
   } catch {
     logger.warn("Progress‑Spinner blieb sichtbar – fahre trotzdem fort");
   }
 
-  /* 2. Innerhalb des Dialogs den sichtbaren, NICHT deaktivierten Button suchen */
   const clicked = await page.waitForFunction(
     () => {
       const dialog = document.querySelector('div[role="dialog"]');
@@ -352,9 +486,8 @@ async function clickShareButton(page: Page): Promise<void> {
   if (!clicked) throw new Error("Share‑Button nicht klickbar");
   logger.info("✅ Share‑Button geklickt, warte auf Dialog‑Verschwinden…");
 
-  /* 3. Bestätigung: Dialog verschwindet oder Feed lädt neu */
   await page.waitForFunction(
-    () => location.pathname === '/'                              // zurück im Feed
+    () => location.pathname === '/'
        || !!document.querySelector('[data-testid="upload-flow-success-toast"]'),
     { timeout: 60_000 }
   );
@@ -363,24 +496,21 @@ async function clickShareButton(page: Page): Promise<void> {
 async function findAndFillCaption(page: Page, text: string): Promise<void> {
   logger.info(`Versuche Caption einzugeben: "${text.slice(0, 100)}…"`);
   
-  // Instagram‑Lexical‑Editor (wie im Snippet: div[role="textbox"] … data-lexical-editor)
   const sel = 'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]';
   await page.waitForSelector(sel, { timeout: 10_000, visible: true });
   const handle = await page.$(sel);
   if (!handle) throw new Error("Caption‑Feld nicht gefunden");
 
-  // Inhalt löschen und echten Tippevorgang durchführen, damit React den State speichert
   await handle.click({ clickCount: 1 });
   await page.keyboard.down("Control");
   await page.keyboard.press("A");
   await page.keyboard.up("Control");
   await page.keyboard.press("Backspace");
-  await page.type(sel, text, { delay: 25 }); // erzeugt focus / input / change‑Events
+  await page.type(sel, text, { delay: 25 });
   await delay(500);
   await page.evaluate(() => (document.activeElement as HTMLElement).blur());
   await delay(300);
 
-  // kleiner Log zum Gegencheck
   const current = await page.evaluate(s => document.querySelector<HTMLElement>(s)?.innerText || "", sel);
   logger.info(`Caption‑Länge nach Eingabe: ${current.length}`);
 }
@@ -389,23 +519,18 @@ async function findAndFillCaption(page: Page, text: string): Promise<void> {
 async function ensureImageExists(postContent?: string): Promise<string> {
   const assetsDir = path.resolve("assets");
   
-  // Erstelle Hauptverzeichnis
   if (!fs.existsSync(assetsDir)) {
     fs.mkdirSync(assetsDir, { recursive: true });
   }
   
-  // Erstelle alle Kategorieordner
   await createCategoryFolders();
   
   try {
     if (postContent) {
-      // Bestimme Kategorie basierend auf Post-Inhalt
       const category = determineImageCategory(postContent);
       logger.info(`Erkannte Bildkategorie für Post: ${category}`);
-      
       return await getRandomImageFromCategory(category);
     } else {
-      // Fallback zu default Kategorie
       return await getRandomImageFromCategory('default');
     }
     
@@ -423,7 +548,6 @@ function determineImageCategory(postContent: string): string {
     let matchCount = 0;
     const foundKeywords: string[] = [];
     
-    // Zähle alle Keyword-Treffer in dieser Kategorie
     for (const keyword of category.keywords) {
       if (content.includes(keyword.toLowerCase())) {
         matchCount++;
@@ -431,12 +555,10 @@ function determineImageCategory(postContent: string): string {
       }
     }
     
-    // Log für Debug
     if (matchCount > 0) {
       logger.info(`Kategorie "${category.folder}": ${matchCount} Treffer [${foundKeywords.join(', ')}]`);
     }
     
-    // Neue beste Kategorie gefunden?
     if (matchCount > bestMatch.matchCount) {
       bestMatch = { category: category.folder, matchCount, keywords: foundKeywords };
     }
@@ -454,25 +576,22 @@ function determineImageCategory(postContent: string): string {
 async function getRandomImageFromCategory(category: string): Promise<string> {
   const categoryPath = path.resolve("assets", category);
   
-  // Prüfe ob Kategorie-Ordner existiert
   if (!fs.existsSync(categoryPath)) {
     logger.warn(`Kategorie-Ordner ${category} existiert nicht, erstelle ihn...`);
     fs.mkdirSync(categoryPath, { recursive: true });
     
-    // Wenn leer, fallback zu default
     if (category !== 'default') {
       return await getRandomImageFromCategory('default');
     }
   }
   
-  // Lade alle Bilddateien aus dem Ordner
   const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp'];
   const imageFiles = fs.readdirSync(categoryPath)
     .filter(file => {
       const ext = path.extname(file).toLowerCase();
       return supportedFormats.includes(ext);
     })
-    .sort(() => Math.random() - 0.5); // ✅ Shuffle das Array!
+    .sort(() => Math.random() - 0.5);
 
   if (imageFiles.length === 0) {
     logger.warn(`Keine Bilder in Kategorie ${category} gefunden`);
@@ -480,12 +599,10 @@ async function getRandomImageFromCategory(category: string): Promise<string> {
     if (category !== 'default') {
       return await getRandomImageFromCategory('default');
     } else {
-      // Erstelle Fallback-Bild für default
       return await createFallbackImage();
     }
   }
 
-  // Wähle zufälliges Bild
   const randomIndex = Math.floor(Math.random() * imageFiles.length);
   const selectedImage = imageFiles[randomIndex];
   const imagePath = path.join(categoryPath, selectedImage);
@@ -496,8 +613,6 @@ async function getRandomImageFromCategory(category: string): Promise<string> {
 
 async function createCategoryFolders(): Promise<void> {
   const baseDir = path.resolve("assets");
-  
-  // Erstelle alle Kategorieordner + default
   const allFolders = [...imageCategories.map(cat => cat.folder), 'default'];
   
   for (const folder of allFolders) {
@@ -513,7 +628,6 @@ async function createFallbackImage(): Promise<string> {
   const fallbackPath = path.resolve("assets/default/fallback.jpg");
   const defaultDir = path.dirname(fallbackPath);
   
-  // Erstelle default Ordner falls nicht vorhanden
   if (!fs.existsSync(defaultDir)) {
     fs.mkdirSync(defaultDir, { recursive: true });
   }
@@ -522,7 +636,6 @@ async function createFallbackImage(): Promise<string> {
     return fallbackPath;
   }
   
-  // Erstelle 1x1 Pixel Placeholder (dein ursprünglicher Code)
   logger.warn("Erstelle Fallback-Bild...");
   const base64PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
   const buffer = Buffer.from(base64PNG, 'base64');
@@ -532,7 +645,6 @@ async function createFallbackImage(): Promise<string> {
   return fallbackPath;
 }
 
-// Debug-Funktion zum Testen der Bildauswahl
 export async function testImageSelection(testPosts: string[]): Promise<void> {
   logger.info("=== BILD-AUSWAHL TEST ===");
   
@@ -550,10 +662,10 @@ export { ensureImageExists };
 
 export async function postJoke(page: Page) {
   try {
-    logger.info("🚀 Starte Post-Erstellung mit Duplikat-Check...");
+    logger.info("🚀 Starte Post-Erstellung mit AI-Duplikat-Check...");
 
-    /* ░░ 0) Generiere einzigartigen Post und Bild ░░ */
-    const { content: jokeContent, imagePath } = await generateUniquePost();
+    /* ░░ 0) Generiere AI-validierten einzigartigen Post und Bild ░░ */
+    const { content: jokeContent, imagePath } = await generateUniquePostWithAI();
     
     logger.info(`📝 Finaler Post-Text: "${jokeContent.substring(0, 100)}..."`);
     logger.info(`🖼️ Gewähltes Bild: ${path.basename(imagePath)}`);
@@ -564,14 +676,13 @@ export async function postJoke(page: Page) {
 
     /* ░░ 2) „+"‑Icon finden und klicken ░░ */
     try {
-      // Mehrere mögliche Selektoren für das Plus-Icon
       const plusSelectors = [
         'svg[aria-label*="New post"]',
         'svg[aria-label*="Create"]', 
         'svg[aria-label*="Neuer Beitrag"]',
         'svg[aria-label*="Beitrag erstellen"]',
-        'a[href="#"] svg', // Fallback
-        'div[role="menuitem"] svg' // Navigation
+        'a[href="#"] svg',
+        'div[role="menuitem"] svg'
       ];
 
       let plusFound = false;
@@ -607,7 +718,7 @@ export async function postJoke(page: Page) {
       
       await fileInput.uploadFile(imagePath);
       logger.info("Bild erfolgreich hochgeladen");
-      await delay(3000); // Warten bis Upload verarbeitet ist
+      await delay(3000);
       
     } catch (error) {
       logger.error("Fehler beim Datei-Upload:", error);
@@ -630,11 +741,9 @@ export async function postJoke(page: Page) {
     logger.info("Beginne Caption-Eingabe...");
     await findAndFillCaption(page, jokeContent);
 
-    // WICHTIG: Länger warten damit Instagram den Text erkennt
     logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
     await delay(5000);
 
-    // Extra: Nochmal ins Caption-Feld klicken um sicherzustellen dass Text da ist
     try {
       await page.click('div[contenteditable="true"][aria-label*="caption"]');
       logger.info("Nochmal ins Caption-Feld geklickt zur Sicherheit");
@@ -643,7 +752,7 @@ export async function postJoke(page: Page) {
       logger.info("Extra-Klick fehlgeschlagen, aber das ist ok");
     }
 
-    // DEBUG: Screenshot - einfach ins Hauptverzeichnis
+    // DEBUG: Screenshot
     const screenshotPath = `debug_${Date.now()}.png`;
     await page.screenshot({ path: screenshotPath });
     logger.info(`Debug-Screenshot vor Teilen erstellt: ${screenshotPath}`);
@@ -670,21 +779,17 @@ export async function postJoke(page: Page) {
       
       await clickShareButton(page);
       
-      // Warten auf Bestätigung - LÄNGER warten
       logger.info("Warte 15 Sekunden auf Upload-Completion...");
       await delay(15000);
       
       // DEBUG: Nach dem Share - prüfe ob Dialog verschwunden oder Fehler aufgetreten
       const postShareStatus = await page.evaluate(() => {
-        // Suche nach Dialogen
         const dialogs = document.querySelectorAll('div[role="dialog"]');
         const hasDialog = dialogs.length > 0;
         
-        // Suche nach Error-Messages
         const errorMessages = document.querySelectorAll('[data-testid="error"], .error, [aria-live="polite"]');
         const errors = Array.from(errorMessages).map(el => el.textContent).filter(text => text && text.length > 0);
         
-        // Suche nach Success-Indicators  
         const successIndicators = document.querySelectorAll('[data-testid="success"], .success');
         const hasSuccess = successIndicators.length > 0;
         
@@ -708,7 +813,7 @@ export async function postJoke(page: Page) {
         await page.waitForSelector('div[role="dialog"]', { timeout: 3000, hidden: true });
         logger.info("✅ Post erfolgreich geteilt - Dialog verschwunden!");
         
-        // ✅✅ NEU: Post in MongoDB speichern NACH erfolgreichem Posting
+        // ✅ NEU: Post in MongoDB speichern NACH erfolgreichem Posting
         await savePostToDatabase(jokeContent, imagePath);
         
       } catch (e) {
@@ -737,7 +842,7 @@ export async function postJoke(page: Page) {
   } catch (error) {
     logger.error("Gesamter Post-Prozess fehlgeschlagen:", error);
     
-    // Screenshot für Debugging - angepasst für GitHub/Render
+    // Screenshot für Debugging
     try {
       const screenshotDir = process.env.NODE_ENV === 'production' ? '/persistent' : './debug';
       const errorScreenshot = `${screenshotDir}/debug_post_error_${Date.now()}.png`;
