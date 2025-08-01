@@ -55,7 +55,7 @@ const Post = mongoose.model('Post', PostSchema);
 
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
+/*
 // AI-basierte Ähnlichkeitsprüfung
 async function checkPostSimilarityWithAI(newPost: string, recentPosts: any[]): Promise<{isValid: boolean, reason?: string, similarPost?: string}> {
   try {
@@ -147,7 +147,43 @@ async function checkPostSimilarityWithAI(newPost: string, recentPosts: any[]): P
     return { isValid: true };
   }
 }
+*/
 
+async function checkBasicDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+  try {
+    const contentHash = crypto.createHash('md5').update(content).digest('hex');
+    const imageName = path.basename(imagePath);
+    
+    // 1. Nur exakte Content-Duplikate prüfen
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    if (exactDuplicate) {
+      logger.warn("❌ Exakter Content-Duplikat gefunden");
+      return { isValid: false, reason: 'exact_content_duplicate' };
+    }
+    
+    // 2. Gleiches Bild in letzten 3 Posts (weniger streng)
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(3)
+      .select('image_name');
+    
+    for (const post of recentPosts) {
+      if (post.image_name === imageName) {
+        logger.warn(`❌ Gleiches Bild in letzten 3 Posts: ${imageName}`);
+        return { isValid: false, reason: 'recent_duplicate_image' };
+      }
+    }
+    
+    logger.info("✅ Basis-Check bestanden - Post ist einzigartig");
+    return { isValid: true };
+    
+  } catch (error) {
+    logger.error("Fehler bei Basis-Check:", error);
+    return { isValid: true }; // Failsafe
+  }
+}
+
+/*
 // Erweiterte Duplikat-Prüfung mit AI
 async function checkPostAndImageDuplicatesWithAI(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
   try {
@@ -192,7 +228,7 @@ async function checkPostAndImageDuplicatesWithAI(content: string, imagePath: str
     return { isValid: true };
   }
 }
-
+*/
 // Speichere Post in MongoDB
 async function savePostToDatabase(content: string, imagePath: string): Promise<void> {
   try {
@@ -233,7 +269,7 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     logger.error(`Versuchte zu speichern: "${content}" (${content.length} Zeichen)`);
   }
 }
-
+/*
 // Generiere verbesserten Post basierend auf vorherigen Ablehnungen
 async function generateImprovedPost(rejectionReasons: string[]): Promise<string> {
   const improvementPrompt = `
@@ -263,7 +299,7 @@ async function generateImprovedPost(rejectionReasons: string[]): Promise<string>
   const result = await runAgent(null as any, improvementPrompt);
   return parseSimpleResponse(result);
 }
-
+*/
 // Parse AI Response (wie in deiner ursprünglichen joke.ts)
 // Parse AI Response (wie in deiner ursprünglichen joke.ts)
 function parseSimpleResponse(response: any): string {
@@ -341,7 +377,7 @@ function parseSimpleResponse(response: any): string {
     return getBackupPost();
   }
 }
-
+/*
 // Intelligente Post-Variation mit AI-Feedback
 async function generateUniquePostWithAI(maxRetries: number = 4): Promise<{content: string, imagePath: string}> {
   let rejectionReasons: string[] = [];
@@ -404,7 +440,7 @@ async function generateUniquePostWithAI(maxRetries: number = 4): Promise<{conten
   
   throw new Error("Konnte keinen AI-validierten Post generieren");
 }
-
+*/
 function getBackupPost(): string {
   const backupPosts = [
     `🎯 Authentizität schlägt Perfektion. Jeden Tag.
@@ -695,7 +731,7 @@ export async function postJoke(page: Page) {
     logger.info("🚀 Starte Post-Erstellung mit AI-Duplikat-Check...");
 
     /* ░░ 0) Generiere AI-validierten einzigartigen Post und Bild ░░ */
-    const { content: jokeContent, imagePath } = await generateUniquePostWithAI();
+    const { content: jokeContent, imagePath } = await generateUniquePostBasedOnHistory();
     
     logger.info(`📝 Finaler Post-Text: "${jokeContent.substring(0, 100)}..."`);
     logger.info(`🖼️ Gewähltes Bild: ${path.basename(imagePath)}`);
