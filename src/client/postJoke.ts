@@ -55,180 +55,7 @@ const Post = mongoose.model('Post', PostSchema);
 
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-/*
-// AI-basierte Ähnlichkeitsprüfung
-async function checkPostSimilarityWithAI(newPost: string, recentPosts: any[]): Promise<{isValid: boolean, reason?: string, similarPost?: string}> {
-  try {
-    // Wenn keine Posts vorhanden, ist alles OK
-    if (recentPosts.length === 0) {
-      return { isValid: true };
-    }
-    
-    // Bereite Kontext für AI vor
-    const recentPostsText = recentPosts.map((post, index) => 
-      `Post ${index + 1} (${Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24))} Tage alt): "${post.content}"`
-    ).join('\n\n');
-    
-    const aiPrompt = `
-    Du bist ein Experte für Content-Analyse. Prüfe ob der neue Post zu ähnlich zu den vorherigen Posts ist.
-    
-    NEUER POST:
-    "${newPost}"
-    
-    VORHERIGE POSTS (letzte 30):
-    ${recentPostsText}
-    
-    Analysiere diese Aspekte:
-    1. Thematische Überschneidungen (gleiche Konzepte, auch wenn anders formuliert)
-    2. Strukturelle Ähnlichkeiten (gleicher Aufbau, gleiche Emojis/Symbole)
-    3. Zeitliche Bezüge (gleiche Wochentage, Jahreszeiten, Feiertage)
-    4. Motivational-Pattern (ähnliche Ermutigungsformeln)
-    5. Inhaltliche Wiederholungen (gleiche Tipps, Ratschläge)
-    6. Sprachliche Muster (wiederkehrende Phrasen, Wörter)
-    
-    BEWERTUNG:
-    - ERLAUBT: Wenn der neue Post frische Perspektiven, andere Themen oder völlig anderen Ansatz hat
-    - ÄHNLICH: Wenn 2+ der oberen Aspekte stark übereinstimmen
-    - SEHR ÄHNLICH: Wenn der Post im Grunde das Gleiche aussagt, nur anders formuliert
-    
-    Antworte in diesem JSON-Format:
-    {
-      "similarity_score": <0-100 Prozent>,
-      "is_too_similar": <true/false>,
-      "main_similarities": ["Aspekt 1", "Aspekt 2"],
-      "most_similar_post": "Post X (Y Tage alt)",
-      "recommendation": "Kurze Begründung"
-    }
-    
-    Sei streng bei der Bewertung - Variation ist wichtiger als Konsistenz.
-    `;
-    
-    console.log("🤖 Führe AI-Ähnlichkeitsanalyse durch...");
-    const aiResponse = await runAgent(null as any, aiPrompt);
-    
-    // Parse AI Response
-    let analysis;
-    try {
-      // Versuche JSON zu parsen
-      const responseText = typeof aiResponse === 'string' ? aiResponse : JSON.stringify(aiResponse);
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        analysis = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error("Kein JSON gefunden");
-      }
-    } catch (parseError) {
-      console.warn("AI-Response konnte nicht geparst werden, verwende Fallback");
-      return { isValid: true }; // Failsafe
-    }
-    
-    // Analysiere AI-Ergebnis
-    const isTooSimilar = analysis.is_too_similar || analysis.similarity_score > 75;
-    
-    if (isTooSimilar) {
-      console.warn(`🤖 AI erkannte ${analysis.similarity_score}% Ähnlichkeit`);
-      console.warn(`📋 Ähnlichkeiten: ${analysis.main_similarities?.join(', ')}`);
-      console.warn(`📄 Ähnlichster Post: ${analysis.most_similar_post}`);
-      console.warn(`💡 Empfehlung: ${analysis.recommendation}`);
-      
-      return {
-        isValid: false,
-        reason: 'ai_detected_similarity',
-        similarPost: analysis.most_similar_post
-      };
-    }
-    
-    console.log(`✅ AI-Check bestanden (${analysis.similarity_score}% Ähnlichkeit)`);
-    return { isValid: true };
-    
-  } catch (error) {
-    console.error("Fehler bei AI-Ähnlichkeitsprüfung:", error);
-    // Failsafe: Bei Fehler erlaube Posting
-    return { isValid: true };
-  }
-}
-*/
 
-async function checkBasicDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
-  try {
-    const contentHash = crypto.createHash('md5').update(content).digest('hex');
-    const imageName = path.basename(imagePath);
-    
-    // 1. Nur exakte Content-Duplikate prüfen
-    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
-    if (exactDuplicate) {
-      logger.warn("❌ Exakter Content-Duplikat gefunden");
-      return { isValid: false, reason: 'exact_content_duplicate' };
-    }
-    
-    // 2. Gleiches Bild in letzten 3 Posts (weniger streng)
-    const recentPosts = await Post.find()
-      .sort({ posted_at: -1 })
-      .limit(3)
-      .select('image_name');
-    
-    for (const post of recentPosts) {
-      if (post.image_name === imageName) {
-        logger.warn(`❌ Gleiches Bild in letzten 3 Posts: ${imageName}`);
-        return { isValid: false, reason: 'recent_duplicate_image' };
-      }
-    }
-    
-    logger.info("✅ Basis-Check bestanden - Post ist einzigartig");
-    return { isValid: true };
-    
-  } catch (error) {
-    logger.error("Fehler bei Basis-Check:", error);
-    return { isValid: true }; // Failsafe
-  }
-}
-
-/*
-// Erweiterte Duplikat-Prüfung mit AI
-async function checkPostAndImageDuplicatesWithAI(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
-  try {
-    const contentHash = crypto.createHash('md5').update(content).digest('hex');
-    const imageName = path.basename(imagePath);
-    
-    // 1. Prüfe auf exakte Content-Duplikate (Hash)
-    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
-    if (exactDuplicate) {
-      logger.warn("❌ Exakter Post-Duplikat gefunden");
-      return { isValid: false, reason: 'exact_content_duplicate' };
-    }
-    
-    // 2. Lade die letzten 30 Posts für AI-Analyse
-    const recentPosts = await Post.find()
-      .sort({ posted_at: -1 })
-      .limit(30)
-      .select('content image_name posted_at');
-    
-    // 3. AI-basierte Ähnlichkeitsprüfung
-    const aiSimilarityCheck = await checkPostSimilarityWithAI(content, recentPosts);
-    
-    if (!aiSimilarityCheck.isValid) {
-      return { isValid: false, reason: aiSimilarityCheck.reason };
-    }
-    
-    // 4. Prüfe die letzten 3 Posts auf gleiches Bild
-    const lastThreePosts = recentPosts.slice(0, 3);
-    for (const post of lastThreePosts) {
-      if (post.image_name === imageName) {
-        logger.warn(`❌ Gleiches Bild wie vor ${lastThreePosts.indexOf(post) + 1} Post(s) verwendet: ${imageName}`);
-        return { isValid: false, reason: 'duplicate_image' };
-      }
-    }
-    
-    logger.info("✅ Post und Bild sind einzigartig (AI + Hash + Bild-Check bestanden)");
-    return { isValid: true };
-    
-  } catch (error) {
-    logger.error("Fehler bei erweiterten Duplikat-Check:", error);
-    // Bei Fehler erlaube Posting (failsafe)
-    return { isValid: true };
-  }
-}
-*/
 // Speichere Post in MongoDB
 async function savePostToDatabase(content: string, imagePath: string): Promise<void> {
   try {
@@ -269,48 +96,17 @@ async function savePostToDatabase(content: string, imagePath: string): Promise<v
     logger.error(`Versuchte zu speichern: "${content}" (${content.length} Zeichen)`);
   }
 }
-/*
-// Generiere verbesserten Post basierend auf vorherigen Ablehnungen
-async function generateImprovedPost(rejectionReasons: string[]): Promise<string> {
-  const improvementPrompt = `
-    Der vorherige Post wurde abgelehnt. Erstelle einen komplett anderen Post mit diesen Verbesserungen:
-    
-    VERMEIDE DIESE PROBLEME (aus vorherigen Versuchen):
-    ${rejectionReasons.map(reason => `- ${reason}`).join('\n')}
-    
-    ERSTELLE EINEN VÖLLIG ANDEREN POST:
-    - Komplett anderes Thema
-    - Andere Struktur und Formulierung  
-    - Andere Emojis oder gar keine
-    - Anderer Tonfall (förmlicher/lockerer)
-    - Andere Perspektive (Kunde statt Agentur, Problem statt Lösung)
-    - Andere Post-Art (Frage statt Statement, Story statt Tipp)
-    
-    Anforderungen:
-    - 350-450 Zeichen für Instagram
-    - Professionell für Social Media Agentur
-    - Deutsch
-    - Bietet echten Mehrwert
-    - Ist einzigartig und frisch
-    
-    Fokussiere auf: Business-Strategien, Tool-Empfehlungen, Kundenbeziehungen, Branchenentwicklungen, oder Team-Insights.
-  `;
-  
-  const result = await runAgent(null as any, improvementPrompt);
-  return parseSimpleResponse(result);
-}
-*/
-// Parse AI Response (wie in deiner ursprünglichen joke.ts)
-// Parse AI Response (wie in deiner ursprünglichen joke.ts)
+
+// Parse AI Response - KORRIGIERT
 function parseSimpleResponse(response: any): string {
   try {
     if (Array.isArray(response)) {
       // ✅ ERWEITERT - alle möglichen Feldnamen:
       if (response[0]?.instagram_post) return response[0].instagram_post;
-      if (response[0]?.friday_post) return response[0].friday_post;        // ← NEU!
-      if (response[0]?.motivational_post) return response[0].motivational_post; // ← NEU!
-      if (response[0]?.agency_post) return response[0].agency_post;        // ← NEU!
-      if (response[0]?.tip_post) return response[0].tip_post;              // ← NEU!
+      if (response[0]?.friday_post) return response[0].friday_post;        
+      if (response[0]?.motivational_post) return response[0].motivational_post; 
+      if (response[0]?.agency_post) return response[0].agency_post;        
+      if (response[0]?.tip_post) return response[0].tip_post;              
       if (response[0]?.witz) return response[0].witz;
       if (response[0]?.joke) return response[0].joke;
       if (response[0]?.content) return response[0].content;
@@ -321,10 +117,10 @@ function parseSimpleResponse(response: any): string {
     if (typeof response === "object" && response !== null) {
       // ✅ ERWEITERT - alle möglichen Feldnamen:
       if (response.instagram_post) return String(response.instagram_post);
-      if (response.friday_post) return String(response.friday_post);        // ← NEU!
-      if (response.motivational_post) return String(response.motivational_post); // ← NEU!
-      if (response.agency_post) return String(response.agency_post);        // ← NEU!
-      if (response.tip_post) return String(response.tip_post);              // ← NEU!
+      if (response.friday_post) return String(response.friday_post);        
+      if (response.motivational_post) return String(response.motivational_post); 
+      if (response.agency_post) return String(response.agency_post);        
+      if (response.tip_post) return String(response.tip_post);              
       if (response.witz) return String(response.witz);
       if (response.Witz) return String(response.Witz);
       if (response.joke) return String(response.joke);
@@ -339,14 +135,14 @@ function parseSimpleResponse(response: any): string {
         if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
           return parsed[0].instagram_post;
         }
-        if (Array.isArray(parsed) && parsed[0]?.friday_post) {          // ← NEU!
+        if (Array.isArray(parsed) && parsed[0]?.friday_post) {          
           return parsed[0].friday_post;
         }
         if (Array.isArray(parsed) && parsed[0]?.witz) {
           return parsed[0].witz;
         }
         if (parsed?.instagram_post) return parsed.instagram_post;
-        if (parsed?.friday_post) return parsed.friday_post;            // ← NEU!
+        if (parsed?.friday_post) return parsed.friday_post;            
         if (parsed?.witz) return parsed.witz;
         return response;
       } catch {
@@ -357,7 +153,7 @@ function parseSimpleResponse(response: any): string {
     // ✅ BESSERES DEBUGGING:
     console.log("Unerwartetes Datenformat:", JSON.stringify(response));
     
-    // ✅ SICHERER ZUGRIFF auf Object.keys
+    // ✅ SICHERER ZUGRIFF auf Object.keys - KORRIGIERT
     const responseObj = Array.isArray(response) ? response[0] : response;
     if (responseObj && typeof responseObj === 'object') {
       console.log("Verfügbare Felder:", Object.keys(responseObj));
@@ -377,70 +173,190 @@ function parseSimpleResponse(response: any): string {
     return getBackupPost();
   }
 }
-/*
-// Intelligente Post-Variation mit AI-Feedback
-async function generateUniquePostWithAI(maxRetries: number = 4): Promise<{content: string, imagePath: string}> {
-  let rejectionReasons: string[] = [];
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      logger.info(`🎨 AI-gestützter Post-Versuch ${attempt}/${maxRetries}...`);
-      
-      // Bei weiteren Versuchen: Instruiere AI, vorherige Probleme zu vermeiden
-      let content: string;
-      if (attempt === 1) {
-        content = await generateJoke();
-      } else {
-        content = await generateImprovedPost(rejectionReasons);
-      }
-      
-      const jokeContent = Array.isArray(content) ? content[0]?.witz ?? "" : (content as string);
-      let imagePath = await ensureImageExists(jokeContent);
-      
-      // Prüfe mit AI-verbesserter Duplikat-Erkennung
-      const validation = await checkPostAndImageDuplicatesWithAI(jokeContent, imagePath);
-      
-      if (validation.isValid) {
-        logger.info(`✅ Einzigartiger Post nach ${attempt} AI-Versuch(en) generiert`);
-        return { content: jokeContent, imagePath };
-      }
-      
-      // Sammle Ablehnungsgründe für nächsten Versuch
-      rejectionReasons.push(validation.reason || 'unknown');
-      
-      // Bei Bild-Duplikat: Versuche anderes Bild
-      if (validation.reason === 'duplicate_image') {
-        logger.info("🔄 Versuche anderes Bild...");
-        const category = determineImageCategory(jokeContent);
-        imagePath = await getRandomImageFromCategory(category);
-        
-        const recheck = await checkPostAndImageDuplicatesWithAI(jokeContent, imagePath);
-        if (recheck.isValid) {
-          logger.info("✅ Anderes Bild erfolgreich gewählt");
-          return { content: jokeContent, imagePath };
-        }
-      }
-      
-      logger.warn(`⚠️ AI-Versuch ${attempt} abgelehnt: ${validation.reason}`);
-      
-      // Bei letztem Versuch: Akzeptiere es trotzdem
-      if (attempt === maxRetries) {
-        logger.warn("⚠️ Max. AI-Versuche erreicht - verwende letzten Post");
-        return { content: jokeContent, imagePath };
-      }
-      
-      // Warten vor nächstem Versuch
-      await delay(3000);
-      
-    } catch (error) {
-      logger.error(`Fehler bei AI-Post-Generierung Versuch ${attempt}:`, error);
-      if (attempt === maxRetries) throw error;
+
+// Analysiere existierende Posts und generiere gezielten neuen Content
+async function generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
+  try {
+    logger.info("🔍 Analysiere Post-Historie für intelligente Content-Generierung...");
+    
+    // 1. Lade die letzten 50 Posts für umfassende Analyse
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(50)
+      .select('content image_name posted_at post_type');
+    
+    logger.info(`📊 Gefunden: ${recentPosts.length} Posts für Analyse`);
+    
+    // 2. Analysiere Patterns und erstelle Vermeidungs-Guidelines
+    const analysisPrompt = `
+    Du bist ein Content-Strategieexperte. Analysiere diese ${recentPosts.length} vorherigen Posts und erstelle Guidelines für einen neuen, einzigartigen Post.
+
+    VORHERIGE POSTS:
+    ${recentPosts.map((post, index) => {
+      const daysAgo = Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24));
+      return `Post ${index + 1} (vor ${daysAgo} Tagen): "${post.content}"`;
+    }).join('\n\n')}
+
+    AUFGABE: Analysiere diese Posts und identifiziere:
+    
+    1. **Überstrapazierte Themen** (was wurde zu oft behandelt?)
+    2. **Überstrapazierte Strukturen** (gleiche Aufbau-Muster?)
+    3. **Überstrapazierte Wörter/Phrasen** (welche Begriffe kommen zu häufig vor?)
+    4. **Überstrapazierte Emojis** (welche werden übermäßig verwendet?)
+    5. **Zeitliche Lücken** (welche Themen wurden lange nicht behandelt?)
+    6. **Stilistische Monotonie** (zu ähnlicher Tonfall?)
+
+    Gib mir dann KONKRETE EMPFEHLUNGEN für einen neuen Post, der:
+    - Ein UNTERREPRÄSENTIERTES Thema behandelt
+    - Eine ANDERE Struktur/Format hat
+    - FRISCHE Begriffe und Emojis verwendet
+    - Einen VARIIERENDEN Tonfall hat
+
+    Antworte in diesem Format:
+    {
+      "avoid_themes": ["Thema 1", "Thema 2"],
+      "avoid_structures": ["Struktur 1", "Struktur 2"],
+      "avoid_words": ["Wort 1", "Wort 2"],
+      "avoid_emojis": ["🚀", "💡"],
+      "recommended_theme": "Konkretes neues Thema",
+      "recommended_structure": "Neue Post-Struktur",
+      "recommended_tone": "Gewünschter Tonfall",
+      "fresh_elements": ["Element 1", "Element 2"]
     }
+    `;
+
+    logger.info("🤖 Führe Post-Historie-Analyse durch...");
+    const analysisResponse = await runAgent(null as any, analysisPrompt);
+    
+    // Parse Analysis
+    let guidelines;
+    try {
+      const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        guidelines = JSON.parse(jsonMatch[0]);
+        logger.info("✅ Post-Analyse erfolgreich geparst");
+        logger.info(`📋 Zu vermeiden: ${guidelines.avoid_themes?.join(', ')}`);
+        logger.info(`🎯 Empfohlenes Thema: ${guidelines.recommended_theme}`);
+      } else {
+        throw new Error("Keine Guidelines-JSON gefunden");
+      }
+    } catch (parseError) {
+      logger.warn("⚠️ Guidelines-Parsing fehlgeschlagen, verwende Basis-Empfehlungen");
+      guidelines = {
+        avoid_themes: ["Motivation", "Tips"],
+        recommended_theme: "Brancheninsights oder Kundengeschichten",
+        recommended_structure: "Frage-Antwort Format",
+        recommended_tone: "Authentisch und persönlich"
+      };
+    }
+
+    // 3. Generiere gezielten Post basierend auf Analyse
+    const targetedPrompt = `
+    Erstelle einen Instagram-Post für eine Social Media Agentur basierend auf dieser strategischen Analyse:
+
+    **VERMEIDE DIESE ÜBERSTRAPAZIERTEN ELEMENTE:**
+    - Themen: ${guidelines.avoid_themes?.join(', ') || 'Keine spezifischen'}
+    - Strukturen: ${guidelines.avoid_structures?.join(', ') || 'Keine spezifischen'}
+    - Wörter: ${guidelines.avoid_words?.join(', ') || 'Keine spezifischen'} 
+    - Emojis: ${guidelines.avoid_emojis?.join(', ') || 'Keine spezifischen'}
+
+    **NUTZE DIESE FRISCHEN ANSÄTZE:**
+    - Thema: ${guidelines.recommended_theme || 'Unternehmensprozesse oder Kundenerfahrungen'}
+    - Struktur: ${guidelines.recommended_structure || 'Storytelling oder persönliche Anekdote'}
+    - Tonfall: ${guidelines.recommended_tone || 'Ehrlich und bodenständig'}
+    - Frische Elemente: ${guidelines.fresh_elements?.join(', ') || 'Neue Perspektiven'}
+
+    **ANFORDERUNGEN:**
+    - 300-450 Zeichen für Instagram
+    - Professionell aber authentisch
+    - Deutsch
+    - Echter Mehrwert für die Community
+    - Komplett anders als die analysierten Posts
+    - Call-to-Action in Form einer Frage oder Diskussionsanstoß
+
+    **BEISPIEL-THEMEN (falls du Inspiration brauchst):**
+    - Wie sich die Agentur-Landschaft verändert
+    - Lustige Kundenanfragen und was wir daraus lernen
+    - Warum manche Kampagnen scheitern (ehrlich)
+    - Behind-the-scenes von Projekt-Challenges
+    - Wie AI unser Daily Business verändert
+    - Was Kunden wirklich wollen vs. was sie sagen
+
+    Antworte nur mit dem fertigen Instagram-Post Text, keine Erklärungen.
+    `;
+
+    logger.info("🎨 Generiere gezielten Post basierend auf Historie-Analyse...");
+    const targetedPostResponse = await runAgent(null as any, targetedPrompt);
+    const postContent = parseSimpleResponse(targetedPostResponse);
+
+    // 4. Wähle passendes Bild
+    const imagePath = await ensureImageExists(postContent);
+
+    // 5. Final Check - aber nur für exakte Duplikate (nicht AI-Ähnlichkeit)
+    const contentHash = crypto.createHash('md5').update(postContent).digest('hex');
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    
+    if (exactDuplicate) {
+      logger.warn("❌ Trotz Analyse wurde exakter Duplikat generiert - verwende Backup");
+      const backupContent = getBackupPost();
+      const backupImagePath = await ensureImageExists(backupContent);
+      return { content: backupContent, imagePath: backupImagePath };
+    }
+
+    logger.info("✅ Einzigartiger, auf Historie-basierter Post generiert");
+    logger.info(`📝 Neuer Post (${postContent.length} Zeichen): "${postContent.substring(0, 100)}..."`);
+    
+    return { content: postContent, imagePath };
+
+  } catch (error) {
+    logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
+    
+    // Fallback: Verwende die alte Methode
+    logger.info("🔄 Fallback zu einfacher Post-Generierung...");
+    const fallbackContent = await generateJoke();
+    const fallbackParsed = parseSimpleResponse(fallbackContent);
+    const fallbackImagePath = await ensureImageExists(fallbackParsed);
+    
+    return { content: fallbackParsed, imagePath: fallbackImagePath };
   }
-  
-  throw new Error("Konnte keinen AI-validierten Post generieren");
 }
-*/
+
+// Vereinfachte Duplikat-Prüfung (nur für exakte Matches + Bilder)
+async function checkBasicDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+  try {
+    const contentHash = crypto.createHash('md5').update(content).digest('hex');
+    const imageName = path.basename(imagePath);
+    
+    // 1. Exakte Content-Duplikate
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    if (exactDuplicate) {
+      logger.warn("❌ Exakter Content-Duplikat gefunden");
+      return { isValid: false, reason: 'exact_content_duplicate' };
+    }
+    
+    // 2. Gleiches Bild in letzten 5 Posts
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(5)
+      .select('image_name posted_at');
+    
+    for (const post of recentPosts) {
+      if (post.image_name === imageName) {
+        logger.warn(`❌ Gleiches Bild in letzten 5 Posts verwendet: ${imageName}`);
+        return { isValid: false, reason: 'recent_duplicate_image' };
+      }
+    }
+    
+    logger.info("✅ Basis-Duplikat-Check bestanden");
+    return { isValid: true };
+    
+  } catch (error) {
+    logger.error("Fehler bei Basis-Duplikat-Check:", error);
+    return { isValid: true }; // Failsafe
+  }
+}
+
 function getBackupPost(): string {
   const backupPosts = [
     `🎯 Authentizität schlägt Perfektion. Jeden Tag.
@@ -728,13 +644,23 @@ export { ensureImageExists };
 
 export async function postJoke(page: Page) {
   try {
-    logger.info("🚀 Starte Post-Erstellung mit AI-Duplikat-Check...");
+    logger.info("🚀 Starte intelligente Post-Erstellung mit Historie-Analyse...");
 
-    /* ░░ 0) Generiere AI-validierten einzigartigen Post und Bild ░░ */
+    /* ░░ 0) Generiere Post basierend auf Historie-Analyse ░░ */
     const { content: jokeContent, imagePath } = await generateUniquePostBasedOnHistory();
     
+    // Optional: Basis-Check für absolute Duplikate
+    const validation = await checkBasicDuplicates(jokeContent, imagePath);
+    let finalImagePath = imagePath;
+    
+    if (!validation.isValid && validation.reason === 'recent_duplicate_image') {
+      logger.info("🔄 Wähle anderes Bild wegen Recent-Duplikat...");
+      finalImagePath = await ensureImageExists(jokeContent);
+      logger.info(`📷 Neues Bild gewählt: ${path.basename(finalImagePath)}`);
+    }
+    
     logger.info(`📝 Finaler Post-Text: "${jokeContent.substring(0, 100)}..."`);
-    logger.info(`🖼️ Gewähltes Bild: ${path.basename(imagePath)}`);
+    logger.info(`🖼️ Gewähltes Bild: ${path.basename(finalImagePath)}`);
 
     /* ░░ 1) Instagram‑Startseite ░░ */
     await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
@@ -782,7 +708,7 @@ export async function postJoke(page: Page) {
       const fileInput = await page.$(fileSel);
       if (!fileInput) throw new Error("Kein Datei‑Input gefunden!");
       
-      await fileInput.uploadFile(imagePath);
+      await fileInput.uploadFile(finalImagePath);
       logger.info("Bild erfolgreich hochgeladen");
       await delay(3000);
       
@@ -879,8 +805,8 @@ export async function postJoke(page: Page) {
         await page.waitForSelector('div[role="dialog"]', { timeout: 3000, hidden: true });
         logger.info("✅ Post erfolgreich geteilt - Dialog verschwunden!");
         
-        // ✅ NEU: Post in MongoDB speichern NACH erfolgreichem Posting
-        await savePostToDatabase(jokeContent, imagePath);
+        // ✅ Post in MongoDB speichern NACH erfolgreichem Posting
+        await savePostToDatabase(jokeContent, finalImagePath);
         
       } catch (e) {
         logger.warn("⚠️ Dialog noch sichtbar - Post möglicherweise nicht erfolgreich");
@@ -897,7 +823,7 @@ export async function postJoke(page: Page) {
         logger.info(`Verbleibende Dialog-Inhalte: ${JSON.stringify(dialogContent)}`);
         
         // Speichere trotzdem - könnte erfolgreich gewesen sein
-        await savePostToDatabase(jokeContent, imagePath);
+        await savePostToDatabase(jokeContent, finalImagePath);
       }
       
     } catch (error) {
