@@ -55,7 +55,7 @@ const Post = mongoose.model('Post', PostSchema);
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Text-Ähnlichkeit berechnen (Jaccard-Ähnlichkeit)
+// Text-Ähnlichkeit berechnen (Jaccard-Ähnlichkeit + Themen-Erkennung)
 function calculateSimilarity(text1: string, text2: string): number {
   // Entferne Hashtags und Emojis für besseren Vergleich
   const clean1 = text1.replace(/#\w+/g, '').replace(/[^\w\s]/g, '').toLowerCase();
@@ -64,10 +64,57 @@ function calculateSimilarity(text1: string, text2: string): number {
   const words1 = new Set(clean1.split(/\s+/).filter(word => word.length > 2));
   const words2 = new Set(clean2.split(/\s+/).filter(word => word.length > 2));
   
+  // Basis Jaccard-Ähnlichkeit
   const intersection = new Set([...words1].filter(word => words2.has(word)));
   const union = new Set([...words1, ...words2]);
+  const jaccardSimilarity = intersection.size / union.size;
   
-  return intersection.size / union.size;
+  // Erkenne thematische Ähnlichkeiten
+  const thematicSimilarity = calculateThematicSimilarity(text1, text2);
+  
+  // Kombiniere beide Scores (Jaccard 60%, Thematic 40%)
+  const finalScore = (jaccardSimilarity * 0.6) + (thematicSimilarity * 0.4);
+  
+  return finalScore;
+}
+
+// Neue Funktion: Thematische Ähnlichkeit
+function calculateThematicSimilarity(text1: string, text2: string): number {
+  const themes = {
+    wochentage: ['montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag', 'sonntag', 'woche'],
+    jahreszeiten: ['frühling', 'sommer', 'herbst', 'winter', 'jahreszeit'],
+    geschäft: ['unternehmer', 'business', 'erfolg', 'strategie', 'innovation', 'wachstum', 'führung'],
+    motivation: ['motivation', 'inspiration', 'mut', 'fokus', 'ziel', 'träume', 'vision'],
+    marketing: ['marketing', 'content', 'social media', 'kampagne', 'branding', 'reichweite'],
+    feste: ['weihnachten', 'ostern', 'neujahr', 'geburtstag', 'jubiläum', 'feier'],
+    tageszeiten: ['morgen', 'mittag', 'abend', 'nacht', 'früh', 'spät'],
+    emotionen: ['freude', 'liebe', 'angst', 'hoffnung', 'stolz', 'glück', 'zufrieden']
+  };
+  
+  const text1Lower = text1.toLowerCase();
+  const text2Lower = text2.toLowerCase();
+  
+  let sharedThemes = 0;
+  let totalThemes = 0;
+  
+  for (const [themeName, keywords] of Object.entries(themes)) {
+    const hasTheme1 = keywords.some(keyword => text1Lower.includes(keyword));
+    const hasTheme2 = keywords.some(keyword => text2Lower.includes(keyword));
+    
+    if (hasTheme1 || hasTheme2) {
+      totalThemes++;
+      if (hasTheme1 && hasTheme2) {
+        sharedThemes++;
+        
+        // Extra Penalty für gleiche spezifische Kombinationen
+        if (themeName === 'wochentage' && themeName === 'jahreszeiten') {
+          sharedThemes += 0.5; // "Freitag + Herbst" = Extra ähnlich
+        }
+      }
+    }
+  }
+  
+  return totalThemes > 0 ? sharedThemes / totalThemes : 0;
 }
 
 // Prüfe auf ähnliche Posts und Bild-Duplikate
@@ -91,7 +138,7 @@ async function checkPostAndImageDuplicates(content: string, imagePath: string): 
     
     for (const post of recentPosts) {
       const similarity = calculateSimilarity(content, post.content);
-      if (similarity > 0.7) { // 70% Ähnlichkeit
+      if (similarity > 0.5) { // Reduziert von 70% auf 50%
         logger.warn(`❌ Ähnlicher Post gefunden (${Math.round(similarity * 100)}% ähnlich)`);
         logger.warn(`Neuer Post: "${content.substring(0, 100)}..."`);
         logger.warn(`Alter Post: "${post.content.substring(0, 100)}..." (vom ${post.posted_at.toLocaleDateString()})`);
