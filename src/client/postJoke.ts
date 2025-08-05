@@ -6,6 +6,7 @@ import logger from "../config/logger";
 import fs from 'fs';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { Post } from "../models";
 
 interface ImageCategory {
   keywords: string[];
@@ -39,19 +40,6 @@ const imageCategories: ImageCategory[] = [
   },
 ];
 
-// MongoDB Schema für Posts
-const PostSchema = new mongoose.Schema({
-  content: { type: String, required: true },
-  content_hash: { type: String, required: true, unique: true },
-  image_name: { type: String, required: true },
-  image_path: { type: String, required: true },
-  posted_at: { type: Date, default: Date.now },
-  post_type: { type: String, default: 'instagram_post' },
-  success: { type: Boolean, default: true },
-  similarity_score: { type: Number, default: 0 }
-});
-
-const Post = mongoose.model('Post', PostSchema);
 
 // Normale delay Funktion
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -847,4 +835,3 @@ export async function postJoke(page: Page) {
     throw error;
   }
 }
-export { Post };
