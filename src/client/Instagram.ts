@@ -143,32 +143,6 @@ async function hasAlreadyCommented(postId: string): Promise<boolean> {
   }
 }
 
-// Prüfe ob es ein eigener Post ist
-function isOwnPost(page: any, postSelector: string): Promise<boolean> {
-  return page.evaluate((selector: string) => {
-    const post = document.querySelector(selector);
-    if (!post) return false;
-    
-    const possibleSelectors = [
-      'header a span',
-      'header a', 
-      'div[data-testid="user-avatar"] + div a',
-      'article header span a'
-    ];
-    
-    for (const userSelector of possibleSelectors) {
-      const userElement = post.querySelector(userSelector);
-      if (userElement && userElement.textContent) {
-        const username = userElement.textContent.trim();
-        // Username aus Environment Variable laden
-        const ownUsername = process.env.IGclearusername || 'fallback_username'; 
-        return username === ownUsername;
-      }
-    }
-    
-    return false;
-  }, postSelector);
-}
 
 // 🎯 ROBUSTE Author-Extraktion ohne spezifische CSS-Klassen
 async function getPostAuthor(page: any, postSelector: string): Promise<string> {
