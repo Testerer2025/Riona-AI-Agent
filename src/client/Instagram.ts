@@ -1023,8 +1023,6 @@ async function interactWithPosts(page: any) {
                     if (comment && !isPosting && !systemBusy) {
                         await commentBox.type(comment);
 
-                        await page.waitForSelector('div[role="button"]:not([disabled])', { timeout: 5000 });
-
                         const postButton = await page.evaluateHandle(() => {
                             const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
                             return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
