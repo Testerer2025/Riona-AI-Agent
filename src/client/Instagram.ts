@@ -11,27 +11,15 @@ import { getInstagramCommentSchema } from "../Agent/schema";
 import { postJoke } from "./postJoke";
 import mongoose from 'mongoose';
 import crypto from 'crypto';
-import { ensureImageExists, Post } from "./postJoke";
+import { ensureImageExists } from "./postJoke";
+import { Post, Comment } from "../models";
 
 // 🔒 ERWEITERTE MUTEX-LOGIK
 let isPosting = false;        // Post-Funktion läuft
 let isCommenting = false;     // Kommentar-Funktion läuft  
 let systemBusy = false;       // Allgemeiner Busy-Flag
 
-// MongoDB Schema für Kommentare
-const CommentSchema = new mongoose.Schema({
-  post_id: { type: String, required: true, unique: true },
-  post_url: { type: String, required: true },
-  post_caption: { type: String, default: '' },
-  post_author: { type: String, default: '' },
-  comment_text: { type: String, required: true },
-  comment_hash: { type: String, required: true },
-  commented_at: { type: Date, default: Date.now },
-  success: { type: Boolean, default: true },
-  is_own_post: { type: Boolean, default: false }
-});
 
-const Comment = mongoose.model('Comment', CommentSchema);
 
 const Post = mongoose.models.Post || mongoose.model('Post', PostSchema);
 
