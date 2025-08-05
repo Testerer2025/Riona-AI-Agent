@@ -11,6 +11,8 @@ import { getInstagramCommentSchema } from "../Agent/schema";
 import { postJoke } from "./postJoke";
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { ensureImageExists } from "./postJoke";
+import mongoose from 'mongoose';
 
 // 🔒 ERWEITERTE MUTEX-LOGIK
 let isPosting = false;        // Post-Funktion läuft
@@ -31,6 +33,20 @@ const CommentSchema = new mongoose.Schema({
 });
 
 const Comment = mongoose.model('Comment', CommentSchema);
+
+
+const PostSchema = new mongoose.Schema({
+  content: { type: String, required: true },
+  content_hash: { type: String, required: true, unique: true },
+  image_name: { type: String, required: true },
+  image_path: { type: String, required: true },
+  posted_at: { type: Date, default: Date.now },
+  post_type: { type: String, default: 'instagram_post' },
+  success: { type: Boolean, default: true },
+  similarity_score: { type: Number, default: 0 }
+});
+
+const Post = mongoose.model('Post', PostSchema);
 
 // Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
@@ -498,8 +514,128 @@ async function generateUniquePostBasedOnHistory(): Promise<{content: string, ima
       return { content: postContent, imagePath };
     }
     
-    // ... Rest der Funktion bleibt gleich wie vorher
+    // 3. Bei vielen Posts: Analysiere Patterns
+    const analysisPrompt = `
+    Du bist ein Content-Strategieexperte. Analysiere diese ${recentPosts.length} vorherigen Posts und erstelle Guidelines für einen neuen, einzigartigen Post.
+
+    VORHERIGE POSTS:
+    ${recentPosts.map((post, index) => {
+      const daysAgo = Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24));
+      return `Post ${index + 1} (vor ${daysAgo} Tagen): "${post.content}"`;
+    }).join('\n\n')}
+
+    AUFGABE: Analysiere diese Posts und identifiziere:
     
+    1. **Überstrapazierte Themen** (was wurde zu oft behandelt?)
+    2. **Überstrapazierte Strukturen** (gleiche Aufbau-Muster?)
+    3. **Überstrapazierte Wörter/Phrasen** (welche Begriffe kommen zu häufig vor?)
+    4. **Überstrapazierte Emojis** (welche werden übermäßig verwendet?)
+    5. **Zeitliche Lücken** (welche Themen wurden lange nicht behandelt?)
+    6. **Stilistische Monotonie** (zu ähnlicher Tonfall?)
+
+    Gib mir dann KONKRETE EMPFEHLUNGEN für einen neuen Post, der:
+    - Ein UNTERREPRÄSENTIERTES Thema behandelt
+    - Eine ANDERE Struktur/Format hat
+    - FRISCHE Begriffe und Emojis verwendet
+    - Einen VARIIERENDEN Tonfall hat
+
+    Antworte in diesem Format:
+    {
+      "avoid_themes": ["Thema 1", "Thema 2"],
+      "avoid_structures": ["Struktur 1", "Struktur 2"],
+      "avoid_words": ["Wort 1", "Wort 2"],
+      "avoid_emojis": ["🚀", "💡"],
+      "recommended_theme": "Konkretes neues Thema",
+      "recommended_structure": "Neue Post-Struktur",
+      "recommended_tone": "Gewünschter Tonfall",
+      "fresh_elements": ["Element 1", "Element 2"]
+    }
+    `;
+
+    logger.info("🤖 Führe Post-Historie-Analyse durch...");
+    const analysisResponse = await runAgent(null as any, analysisPrompt);
+    
+    // Parse Analysis
+    let guidelines;
+    try {
+      const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        guidelines = JSON.parse(jsonMatch[0]);
+        logger.info("✅ Post-Analyse erfolgreich geparst");
+        logger.info(`📋 Zu vermeiden: ${guidelines.avoid_themes?.join(', ')}`);
+        logger.info(`🎯 Empfohlenes Thema: ${guidelines.recommended_theme}`);
+      } else {
+        throw new Error("Keine Guidelines-JSON gefunden");
+      }
+    } catch (parseError) {
+      logger.warn("⚠️ Guidelines-Parsing fehlgeschlagen, verwende Basis-Empfehlungen");
+      guidelines = {
+        avoid_themes: ["Motivation", "Tips"],
+        recommended_theme: "Brancheninsights oder Kundengeschichten",
+        recommended_structure: "Frage-Antwort Format",
+        recommended_tone: "Authentisch und persönlich"
+      };
+    }
+
+    // 4. Generiere gezielten Post basierend auf Analyse
+    const targetedPrompt = `
+    Erstelle einen Instagram-Post für eine Social Media Agentur basierend auf dieser strategischen Analyse:
+
+    **VERMEIDE DIESE ÜBERSTRAPAZIERTEN ELEMENTE:**
+    - Themen: ${guidelines.avoid_themes?.join(', ') || 'Keine spezifischen'}
+    - Strukturen: ${guidelines.avoid_structures?.join(', ') || 'Keine spezifischen'}
+    - Wörter: ${guidelines.avoid_words?.join(', ') || 'Keine spezifischen'} 
+    - Emojis: ${guidelines.avoid_emojis?.join(', ') || 'Keine spezifischen'}
+
+    **NUTZE DIESE FRISCHEN ANSÄTZE:**
+    - Thema: ${guidelines.recommended_theme || 'Unternehmensprozesse oder Kundenerfahrungen'}
+    - Struktur: ${guidelines.recommended_structure || 'Storytelling oder persönliche Anekdote'}
+    - Tonfall: ${guidelines.recommended_tone || 'Ehrlich und bodenständig'}
+    - Frische Elemente: ${guidelines.fresh_elements?.join(', ') || 'Neue Perspektiven'}
+
+    **ANFORDERUNGEN:**
+    - 300-450 Zeichen für Instagram
+    - Professionell aber authentisch
+    - Deutsch
+    - Echter Mehrwert für die Community
+    - Komplett anders als die analysierten Posts
+    - Call-to-Action in Form einer Frage oder Diskussionsanstoß
+
+    **BEISPIEL-THEMEN (falls du Inspiration brauchst):**
+    - Wie sich die Agentur-Landschaft verändert
+    - Lustige Kundenanfragen und was wir daraus lernen
+    - Warum manche Kampagnen scheitern (ehrlich)
+    - Behind-the-scenes von Projekt-Challenges
+    - Wie AI unser Daily Business verändert
+    - Was Kunden wirklich wollen vs. was sie sagen
+
+    Antworte nur mit dem fertigen Instagram-Post Text, keine Erklärungen.
+    `;
+
+    logger.info("🎨 Generiere gezielten Post basierend auf Historie-Analyse...");
+    const targetedPostResponse = await runAgent(null as any, targetedPrompt);
+    const postContent = parseSimpleResponse(targetedPostResponse);
+
+    // 5. Wähle passendes Bild
+    const imagePath = await ensureImageExists(postContent);
+
+    // 6. Final Check - aber nur für exakte Duplikate (nicht AI-Ähnlichkeit)
+    const contentHash = crypto.createHash('md5').update(postContent).digest('hex');
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    
+    if (exactDuplicate) {
+      logger.warn("❌ Trotz Analyse wurde exakter Duplikat generiert - verwende Backup");
+      const backupContent = generateEmergencyPost();
+      const backupImagePath = await ensureImageExists(backupContent);
+      return { content: backupContent, imagePath: backupImagePath };
+    }
+
+    logger.info("✅ Einzigartiger, auf Historie-basierter Post generiert");
+    logger.info(`📝 Neuer Post (${postContent.length} Zeichen): "${postContent.substring(0, 100)}..."`);
+    
+    return { content: postContent, imagePath };
+
   } catch (error) {
     logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
     
@@ -777,7 +913,7 @@ async function interactWithPosts(page: any) {
             
             const postUrl = await getPostUrl(page, postSelector);
             
-            const captionSelector = `${postSelector} div.x9f619 span._ap3a div span._ap3a`;
+            const captionSelector = `${postSelector} span[dir="auto"], ${postSelector} article span`;
             const captionElement = await page.$(captionSelector);
 
             let caption = "";
