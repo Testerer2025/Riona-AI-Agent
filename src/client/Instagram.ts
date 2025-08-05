@@ -44,20 +44,22 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // 🔒 SICHERER POSTING-WRAPPER
 async function safePostJoke(page: any): Promise<void> {
+  // ✅ LOCKS SOFORT SETZEN - VOR ALLEM ANDEREN!
   if (systemBusy || isPosting || isCommenting) {
     logger.info("🚫 System busy - Post verschoben");
     return;
   }
 
-  // Setze alle Locks
+  // Setze alle Locks SOFORT
   isPosting = true;
   systemBusy = true;
+  logger.info("🔒 Posting-Locks gesetzt - alle anderen Aktivitäten pausiert");
   
   // Unterbreche Kommentar-Loop falls läuft
   if (isCommenting) {
     logger.info("⏸️ Pausiere Kommentieren für Post...");
     isCommenting = false;
-    await delay(2000); // Kurz warten bis Kommentar-Loop beendet
+    await delay(3000); // Etwas länger warten bis Kommentar-Loop sicher beendet
   }
 
   try {
@@ -310,14 +312,27 @@ async function runInstagram() {
     await page.screenshot({ path: "logged_in.png" });
     await page.goto("https://www.instagram.com/");
 
-    // 🚀 SICHERER POST-TIMER mit verbesserter Logik
+    // 🚀 VERBESSERTER POST-TIMER mit Konflikt-Vermeidung
     setInterval(async () => {
+        // Mehrfache Sicherheitschecks
+        if (systemBusy || isPosting || isCommenting) {
+            logger.info("🚫 Post-Timer: System busy - überspringe diesen Zyklus");
+            return;
+        }
+        
+        // Zusätzlicher Check: Ist Kommentar-System gerade aktiv?
+        if (isCommenting) {
+            logger.info("🚫 Post-Timer: Kommentieren läuft - warte auf nächsten Zyklus");
+            return;
+        }
+        
+        logger.info("✅ Post-Timer: System frei - starte Post-Prozess");
         await safePostJoke(page);
     }, 3 * 60 * 1000); // Alle 3 Minuten versuchen
 
     // Warte 50 Minuten bevor Kommentieren/Liken startet
     logger.info("Warte 50 Minuten bevor Like/Comment-Aktivität startet...");
-    await delay(4 * 60 * 1000);
+    await delay(50 * 60 * 1000);
     logger.info("Starte jetzt Like/Comment-Aktivität...");
 
     // 💬 SICHERE HAUPT-LOOP mit Konflikte-Vermeidung
@@ -364,11 +379,11 @@ async function interactWithPosts(page: any) {
     const maxPosts = 50;
 
     while (postIndex <= maxPosts) {
-        // 🔒 KONTINUIERLICHER BUSY-CHECK
+        // 🔒 SOFORTIGER AUSSTIEG bei Post-Start
         if (isPosting || systemBusy) {
-            logger.info("🚫 Posting läuft - pausiere Kommentieren");
-            await delay(10_000); // 10s warten und neu prüfen
-            continue;
+            logger.info("🚫 SOFORTIGER STOPP: Posting läuft - beende Kommentar-Loop");
+            isCommenting = false; // Setz Flag zurück
+            return; // Sofort beenden, nicht continue!
         }
 
         try {
@@ -379,14 +394,23 @@ async function interactWithPosts(page: any) {
                 return;
             }
 
-            // 🔒 NOCHMALIGER CHECK vor jeder Post-Interaktion
+            // 🔒 KONTINUIERLICHER CHECK in kürzeren Abständen
             if (isPosting || systemBusy) {
-                logger.info("🚫 System wurde busy während Iteration - beende");
+                logger.info("🚫 System wurde während Post-Verarbeitung busy - SOFORTIGER AUSSTIEG");
+                isCommenting = false;
                 return;
             }
 
-            // 1. Extrahiere Post-Daten
+            // 1. Extrahiere Post-Daten (mit Busy-Check)
             const postAuthor = await getPostAuthor(page, postSelector);
+            
+            // Zwischencheck
+            if (isPosting || systemBusy) {
+                logger.info("🚫 System busy während Author-Extraktion - AUSSTIEG");
+                isCommenting = false;
+                return;
+            }
+            
             const postUrl = await getPostUrl(page, postSelector);
             
             const captionSelector = `${postSelector} div.x9f619 span._ap3a div span._ap3a`;
@@ -398,6 +422,13 @@ async function interactWithPosts(page: any) {
                 console.log(`Caption for post ${postIndex}: ${caption}`);
             } else {
                 console.log(`No caption found for post ${postIndex}.`);
+            }
+
+            // Zwischencheck vor More-Link
+            if (isPosting || systemBusy) {
+                logger.info("🚫 System busy während Caption-Extraktion - AUSSTIEG");
+                isCommenting = false;
+                return;
             }
 
             const moreLinkSelector = `${postSelector} div.x9f619 span._ap3a span div span.x1lliihq`;
@@ -419,16 +450,19 @@ async function interactWithPosts(page: any) {
             if (isOwn) {
                 logger.info(`⏭️ Überspringe eigenen Post ${postIndex} von ${postAuthor}`);
                 
-                const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
-                const likeButton = await page.$(likeButtonSelector);
-                const ariaLabel = await likeButton?.evaluate((el: Element) =>
-                    el.getAttribute("aria-label")
-                );
+                // Auch bei eigenen Posts: Check vor Like
+                if (!isPosting && !systemBusy) {
+                    const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
+                    const likeButton = await page.$(likeButtonSelector);
+                    const ariaLabel = await likeButton?.evaluate((el: Element) =>
+                        el.getAttribute("aria-label")
+                    );
 
-                if (ariaLabel === "Like") {
-                    console.log(`Liking own post ${postIndex}...`);
-                    await likeButton.click();
-                    console.log(`Own post ${postIndex} liked.`);
+                    if (ariaLabel === "Like") {
+                        console.log(`Liking own post ${postIndex}...`);
+                        await likeButton.click();
+                        console.log(`Own post ${postIndex} liked.`);
+                    }
                 }
 
                 postIndex++;
@@ -443,16 +477,19 @@ async function interactWithPosts(page: any) {
             if (alreadyCommented) {
                 logger.info(`⏭️ Post ${postIndex} bereits kommentiert (${postAuthor}) - überspringe`);
                 
-                const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
-                const likeButton = await page.$(likeButtonSelector);
-                const ariaLabel = await likeButton?.evaluate((el: Element) =>
-                    el.getAttribute("aria-label")
-                );
+                // Check vor Like
+                if (!isPosting && !systemBusy) {
+                    const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
+                    const likeButton = await page.$(likeButtonSelector);
+                    const ariaLabel = await likeButton?.evaluate((el: Element) =>
+                        el.getAttribute("aria-label")
+                    );
 
-                if (ariaLabel === "Like") {
-                    console.log(`Liking already commented post ${postIndex}...`);
-                    await likeButton.click();
-                    console.log(`Post ${postIndex} liked.`);
+                    if (ariaLabel === "Like") {
+                        console.log(`Liking already commented post ${postIndex}...`);
+                        await likeButton.click();
+                        console.log(`Post ${postIndex} liked.`);
+                    }
                 }
 
                 postIndex++;
@@ -462,36 +499,56 @@ async function interactWithPosts(page: any) {
                 continue;
             }
 
-            // 5. LIKE LOGIC
-            const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
-            const likeButton = await page.$(likeButtonSelector);
-            const ariaLabel = await likeButton?.evaluate((el: Element) =>
-                el.getAttribute("aria-label")
-            );
+            // 5. LIKE LOGIC mit Busy-Check
+            if (!isPosting && !systemBusy) {
+                const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
+                const likeButton = await page.$(likeButtonSelector);
+                const ariaLabel = await likeButton?.evaluate((el: Element) =>
+                    el.getAttribute("aria-label")
+                );
 
-            if (ariaLabel === "Like") {
-                console.log(`Liking post ${postIndex}...`);
-                await likeButton.click();
-                console.log(`Post ${postIndex} liked.`);
-            } else if (ariaLabel === "Unlike") {
-                console.log(`Post ${postIndex} is already liked.`);
-            } else {
-                console.log(`Like button not found for post ${postIndex}.`);
+                if (ariaLabel === "Like") {
+                    console.log(`Liking post ${postIndex}...`);
+                    await likeButton.click();
+                    console.log(`Post ${postIndex} liked.`);
+                } else if (ariaLabel === "Unlike") {
+                    console.log(`Post ${postIndex} is already liked.`);
+                } else {
+                    console.log(`Like button not found for post ${postIndex}.`);
+                }
             }
 
-            // 6. COMMENT LOGIC (mit zusätzlichen Busy-Checks)
+            // 6. COMMENT LOGIC (mit mehrfachen Busy-Checks)
             if (!isPosting && !systemBusy) {
                 const commentBoxSelector = `${postSelector} textarea`;
                 const commentBox = await page.$(commentBoxSelector);
                 if (commentBox) {
                     logger.info(`💬 Kommentiere neuen Post ${postIndex} von ${postAuthor}...`);
                     
+                    // Check vor AI-Call
+                    if (isPosting || systemBusy) {
+                        logger.info("🚫 System busy vor AI-Comment - überspringe");
+                        postIndex++;
+                        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+                        continue;
+                    }
+                    
                     const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
                     const schema = getInstagramCommentSchema();
+                    
+                    // Check vor AI-Call
+                    if (isPosting || systemBusy) {
+                        logger.info("🚫 System busy vor runAgent - überspringe");
+                        postIndex++;
+                        await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+                        continue;
+                    }
+                    
                     const result = await runAgent(schema, prompt);
                     const comment = result[0]?.comment;
 
-                    if (comment && !isPosting && !systemBusy) { // Nochmaliger Check
+                    // Triple-Check nach AI-Call
+                    if (comment && !isPosting && !systemBusy) {
                         await commentBox.type(comment);
 
                         const postButton = await page.evaluateHandle(() => {
@@ -499,7 +556,8 @@ async function interactWithPosts(page: any) {
                             return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
                         });
 
-                        if (postButton && !isPosting && !systemBusy) { // Final Check
+                        // Final Check vor Post-Button
+                        if (postButton && !isPosting && !systemBusy) {
                             console.log(`Posting comment on post ${postIndex}...`);
                             await postButton.click();
                             console.log(`Comment posted on post ${postIndex}.`);
@@ -519,12 +577,33 @@ async function interactWithPosts(page: any) {
                 logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
             }
 
-            // Wait before moving to the next post
+            // Final Check vor Wait
+            if (isPosting || systemBusy) {
+                logger.info("🚫 System busy vor Wait - SOFORTIGER AUSSTIEG");
+                isCommenting = false;
+                return;
+            }
+
+            // Wait before moving to the next post (mit Busy-Checks während Wait)
             const baseDelay = 180_000;                     
-            const jitter    = Math.floor(Math.random() * 30_000); 
-            const waitTime  = baseDelay + jitter;
+            const jitter = Math.floor(Math.random() * 30_000); 
+            const waitTime = baseDelay + jitter;
             console.log(`Waiting ${waitTime / 1000} seconds before moving to the next post...`);
-            await delay(waitTime);
+            
+            // Warte in kleineren Chunks um auf Posting zu reagieren
+            const chunkSize = 10_000; // 10s Chunks
+            const chunks = Math.ceil(waitTime / chunkSize);
+            
+            for (let i = 0; i < chunks; i++) {
+                if (isPosting || systemBusy) {
+                    logger.info("🚫 System busy während Wait - SOFORTIGER AUSSTIEG");
+                    isCommenting = false;
+                    return;
+                }
+                
+                const currentChunkTime = Math.min(chunkSize, waitTime - (i * chunkSize));
+                await delay(currentChunkTime);
+            }
 
             await page.evaluate(() => {
                 window.scrollBy(0, window.innerHeight);
