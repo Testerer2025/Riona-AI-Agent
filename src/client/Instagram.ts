@@ -12,7 +12,6 @@ import { postJoke } from "./postJoke";
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { ensureImageExists } from "./postJoke";
-import mongoose from 'mongoose';
 
 // 🔒 ERWEITERTE MUTEX-LOGIK
 let isPosting = false;        // Post-Funktion läuft
