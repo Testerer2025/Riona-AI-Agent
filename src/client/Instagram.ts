@@ -170,32 +170,259 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
   }, postSelector);
 }
 
-// Extrahiere Post-Author
+// 🎯 ROBUSTE Author-Extraktion ohne spezifische CSS-Klassen
 async function getPostAuthor(page: any, postSelector: string): Promise<string> {
   try {
     return await page.evaluate((selector: string) => {
       const post = document.querySelector(selector);
-      if (!post) return 'unknown';
+      if (!post) {
+        console.log(`DEBUG: Post not found with selector: ${selector}`);
+        return 'unknown';
+      }
       
-      const possibleSelectors = [
-        'header a span',
-        'header a', 
-        'div[data-testid="user-avatar"] + div a',
-        'article header span a'
-      ];
+      // 🔍 HREF-BASIERTE STRATEGIE (viel robuster)
+      // Suche nach Links die auf Profile zeigen: /username/
+      const profileLinks = post.querySelectorAll('a[href^="/"][href$="/"], a[href^="/"][href*="/?"]');
       
-      for (const userSelector of possibleSelectors) {
-        const userElement = post.querySelector(userSelector);
-        if (userElement && userElement.textContent) {
-          return userElement.textContent.trim();
+      console.log(`DEBUG: Found ${profileLinks.length} potential profile links`);
+      
+      for (let i = 0; i < profileLinks.length; i++) {
+        const link = profileLinks[i];
+        const href = link.getAttribute('href');
+        
+        if (href) {
+          console.log(`DEBUG: Checking link ${i+1}: ${href}`);
+          
+          // Extrahiere Username aus href
+          let username = '';
+          
+          // Pattern 1: /username/ oder /username/?param=value
+          const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+          if (match && match[1]) {
+            username = match[1];
+            
+            console.log(`DEBUG: Extracted username from href: "${username}"`);
+            
+            // ✅ VALIDIERUNG: Ist das ein gültiger Instagram-Username?
+            if (username && 
+                username.length > 0 && 
+                username.length <= 30 &&
+                username !== 'p' && // Post-Links /p/xyz ausschließen
+                username !== 'reel' &&
+                username !== 'reels' &&
+                username !== 'tv' &&
+                username !== 'stories' &&
+                username !== 'explore' &&
+                username !== 'accounts' &&
+                username !== 'direct' &&
+                !username.includes('audio') && // /reels/audio/xyz
+                !username.includes('hashtag') &&
+                !username.match(/^\d+$/) && // Nicht nur Zahlen
+                username.match(/^[a-zA-Z0-9._]+$/)) { // Nur gültige Instagram-Zeichen
+                
+                // ZUSÄTZLICH: Prüfe ob das Link-Element Text enthält (nicht nur Icon)
+                const linkText = link.textContent?.trim() || '';
+                const hasText = linkText.length > 0 && 
+                               linkText !== '•' && 
+                               !linkText.includes('Std.') &&
+                               !linkText.includes('Tag') &&
+                               !linkText.includes('Original-Audio') &&
+                               !linkText.match(/^\d+\s+(Std|Tag|Tage)\.?$/);
+                
+                console.log(`DEBUG: Link text: "${linkText}", hasValidText: ${hasText}`);
+                
+                if (hasText) {
+                  console.log(`DEBUG: ✅ VALID USERNAME FOUND: "${username}" from href: ${href}`);
+                  return username;
+                }
+            } else {
+              console.log(`DEBUG: ❌ Invalid username: "${username}" from href: ${href}`);
+            }
+          }
+        }
+      }
+       // 🔍 FALLBACK: Suche nach span[dir="auto"] mit vernünftigem Text
+      const dirAutoSpans = post.querySelectorAll('span[dir="auto"]');
+      console.log(`DEBUG: Found ${dirAutoSpans.length} span[dir="auto"] elements`);
+      
+      for (let i = 0; i < dirAutoSpans.length; i++) {
+        const span = dirAutoSpans[i];
+        const text = span.textContent?.trim() || '';
+        
+        console.log(`DEBUG: span[dir="auto"] ${i+1}: "${text}"`);
+        
+        if (text && 
+            text.length > 0 && 
+            text.length <= 30 &&
+            !text.includes('•') &&
+            !text.includes('und') &&
+            !text.includes('and') &&
+            !text.includes('Std.') &&
+            !text.includes('Tag') &&
+            !text.includes('Original-Audio') &&
+            !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
+            text.match(/^[a-zA-Z0-9._]+$/)) {
+          
+          console.log(`DEBUG: ✅ VALID USERNAME from span: "${text}"`);
+          return text;
         }
       }
       
+      // 🔍 LETZTE CHANCE: Alle <a> Tags mit Text durchsuchen
+      const allLinks = post.querySelectorAll('a');
+      console.log(`DEBUG: Checking all ${allLinks.length} links for username text`);
+      
+      for (const link of allLinks) {
+        const text = link.textContent?.trim() || '';
+        
+        if (text && 
+            text.length > 0 && 
+            text.length <= 30 &&
+            !text.includes('•') &&
+            !text.includes('und') &&
+            !text.includes('and') &&
+            !text.includes('Std.') &&
+            !text.includes('Tag') &&
+            !text.includes('Original-Audio') &&
+            !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
+            text.match(/^[a-zA-Z0-9._]+$/)) {
+          
+          console.log(`DEBUG: ✅ VALID USERNAME from link text: "${text}"`);
+          return text;
+        }
+      }
+      
+      console.log('DEBUG: No valid username found, returning unknown');
       return 'unknown';
     }, postSelector);
   } catch (error) {
     logger.error("Fehler beim Extrahieren des Post-Authors:", error);
     return 'unknown';
+  }
+}
+
+// Vereinfachte Own-Post Erkennung
+function isOwnPost(page: any, postSelector: string): Promise<boolean> {
+  return page.evaluate((selector: string) => {
+    const ownUsername = process.env.IGclearusername || 'fallback_username';
+    console.log(`DEBUG: Own username from env: "${ownUsername}"`);
+    
+    const post = document.querySelector(selector);
+    if (!post) {
+      console.log(`DEBUG: Post not found for own-post check: ${selector}`);
+      return false;
+    }
+    
+    // 🔍 HREF-BASIERTE STRATEGIE
+    const profileLinks = post.querySelectorAll('a[href^="/"][href$="/"], a[href^="/"][href*="/?"]');
+    
+    for (const link of profileLinks) {
+      const href = link.getAttribute('href');
+      
+      if (href) {
+        const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+        if (match && match[1]) {
+          const username = match[1];
+          
+          if (username && 
+              username.length > 0 && 
+              username.length <= 30 &&
+              username !== 'p' &&
+              username !== 'reel' &&
+              username !== 'reels' &&
+              username !== 'tv' &&
+              username !== 'stories' &&
+              username !== 'explore' &&
+              username !== 'accounts' &&
+              username !== 'direct' &&
+              !username.includes('audio') &&
+              !username.includes('hashtag') &&
+              !username.match(/^\d+$/) &&
+              username.match(/^[a-zA-Z0-9._]+$/)) {
+            
+            console.log(`DEBUG: Comparing "${username}" with own "${ownUsername}"`);
+            
+            if (username === ownUsername) {
+              console.log(`DEBUG: ✅ MATCH! This is own post`);
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    // 🔍 FALLBACK: Textbasierte Suche
+    const allLinks = post.querySelectorAll('a');
+    for (const link of allLinks) {
+      const text = link.textContent?.trim() || '';
+      
+      if (text && 
+          text.length > 0 && 
+          text.length <= 30 &&
+          !text.includes('•') &&
+          !text.includes('und') &&
+          !text.includes('and') &&
+          !text.includes('Std.') &&
+          !text.includes('Tag') &&
+          !text.includes('Original-Audio') &&
+          !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
+          text.match(/^[a-zA-Z0-9._]+$/)) {
+        
+        console.log(`DEBUG: Comparing text "${text}" with own "${ownUsername}"`);
+        
+        if (text === ownUsername) {
+          console.log(`DEBUG: ✅ MATCH! This is own post (by text)`);
+          return true;
+        }
+      }
+    }
+    
+    console.log(`DEBUG: ❌ NO MATCH - Not own post`);
+    return false;
+  }, postSelector);
+}
+
+// 🔍 EINFACHE DEBUG-FUNKTION
+async function debugPostStructure(page: any, maxPosts: number = 2): Promise<void> {
+  logger.info("🔍 DEBUG: Analysiere Post-Struktur...");
+  
+  for (let i = 1; i <= maxPosts; i++) {
+    const postSelector = `article:nth-of-type(${i})`;
+    
+    if (!(await page.$(postSelector))) {
+      logger.info(`DEBUG: Post ${i} nicht gefunden`);
+      break;
+    }
+    
+    logger.info(`\n=== POST ${i} DEBUG ===`);
+    
+    // Analysiere alle Links im Post
+    const linkAnalysis = await page.evaluate((selector: string) => {
+      const post = document.querySelector(selector);
+      if (!post) return { error: 'Post not found' };
+      
+      const links = Array.from(post.querySelectorAll('a')).map((a, idx) => ({
+        index: idx,
+        href: a.getAttribute('href'),
+        text: a.textContent?.trim() || '',
+        role: a.getAttribute('role'),
+        hasSpanWithDirAuto: !!a.querySelector('span[dir="auto"]')
+      })).filter(link => link.href || link.text);
+      
+      return { links, totalLinks: links.length };
+    }, postSelector);
+    
+    logger.info(`Post ${i} Links:`, JSON.stringify(linkAnalysis, null, 2));
+    
+    // Test unsere Funktionen
+    const author = await getPostAuthor(page, postSelector);
+    const isOwn = await isOwnPost(page, postSelector);
+    
+    logger.info(`ERGEBNIS Post ${i}:`);
+    logger.info(`  - Author: "${author}"`);
+    logger.info(`  - Is Own: ${isOwn}`);
+    logger.info(`  - Own Username: "${process.env.IGclearusername}"`);
+    logger.info("---");
   }
 }
 
