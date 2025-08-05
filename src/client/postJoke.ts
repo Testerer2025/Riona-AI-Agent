@@ -847,3 +847,4 @@ export async function postJoke(page: Page) {
     throw error;
   }
 }
+export { Post };
