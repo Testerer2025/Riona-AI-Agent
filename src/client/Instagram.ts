@@ -12,11 +12,14 @@ import { postJoke } from "./postJoke";
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 
-let jokeLock = false;
+// 🔒 ERWEITERTE MUTEX-LOGIK
+let isPosting = false;        // Post-Funktion läuft
+let isCommenting = false;     // Kommentar-Funktion läuft  
+let systemBusy = false;       // Allgemeiner Busy-Flag
 
 // MongoDB Schema für Kommentare
 const CommentSchema = new mongoose.Schema({
-  post_id: { type: String, required: true, unique: true }, // Eindeutige Post-ID
+  post_id: { type: String, required: true, unique: true },
   post_url: { type: String, required: true },
   post_caption: { type: String, default: '' },
   post_author: { type: String, default: '' },
@@ -33,12 +36,93 @@ const Comment = mongoose.model('Comment', CommentSchema);
 puppeteer.use(StealthPlugin());
 puppeteer.use(
     AdblockerPlugin({
-        // Optionally enable Cooperative Mode for several request interceptors
         interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
     })
 );
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 🔒 SICHERER POSTING-WRAPPER
+async function safePostJoke(page: any): Promise<void> {
+  if (systemBusy || isPosting || isCommenting) {
+    logger.info("🚫 System busy - Post verschoben");
+    return;
+  }
+
+  // Setze alle Locks
+  isPosting = true;
+  systemBusy = true;
+  
+  // Unterbreche Kommentar-Loop falls läuft
+  if (isCommenting) {
+    logger.info("⏸️ Pausiere Kommentieren für Post...");
+    isCommenting = false;
+    await delay(2000); // Kurz warten bis Kommentar-Loop beendet
+  }
+
+  try {
+    logger.info("🚀 Starte sicheren Post-Prozess...");
+    
+    // Stelle sicher dass wir auf der Hauptseite sind
+    const currentUrl = page.url();
+    if (!currentUrl.includes('instagram.com') || currentUrl.includes('/p/') || currentUrl.includes('create')) {
+      logger.info("📍 Navigiere zur Instagram-Hauptseite vor Post...");
+      await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+      await delay(3000);
+    }
+    
+    await postJoke(page);
+    
+    logger.info("✅ Post erfolgreich - kehre zum Feed zurück");
+    
+    // Zurück zum Feed für Kommentieren
+    await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+    await delay(5000); // Etwas länger warten damit Feed lädt
+    
+  } catch (error) {
+    logger.error("❌ Post-Fehler:", error);
+    
+    // Bei Fehler: Versuche zum Feed zurückzukehren
+    try {
+      await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+      await delay(3000);
+    } catch (navError) {
+      logger.error("❌ Navigation nach Post-Fehler fehlgeschlagen:", navError);
+    }
+  } finally {
+    // Locks freigeben
+    isPosting = false;
+    systemBusy = false;
+    logger.info("🔓 Post-Prozess beendet - System wieder frei");
+  }
+}
+
+// 🔒 SICHERER KOMMENTAR-WRAPPER  
+async function safeInteractWithPosts(page: any): Promise<void> {
+  if (systemBusy || isPosting) {
+    logger.info("🚫 System busy oder Posting läuft - Kommentieren pausiert");
+    return;
+  }
+
+  isCommenting = true;
+  
+  try {
+    // Stelle sicher dass wir im Feed sind
+    const currentUrl = page.url();
+    if (!currentUrl.includes('instagram.com') || currentUrl.includes('/p/') || currentUrl.includes('create')) {
+      logger.info("📍 Navigiere zum Feed für Kommentieren...");
+      await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+      await delay(3000);
+    }
+    
+    await interactWithPosts(page);
+    
+  } catch (error) {
+    logger.error("❌ Kommentar-Fehler:", error);
+  } finally {
+    isCommenting = false;
+  }
+}
 
 // Generiere eindeutige Post-ID basierend auf Post-Inhalt und Position
 function generatePostId(caption: string, postIndex: number, author: string): string {
@@ -53,7 +137,7 @@ async function hasAlreadyCommented(postId: string): Promise<boolean> {
     return !!existingComment;
   } catch (error) {
     logger.error("Fehler bei Kommentar-Duplikat-Check:", error);
-    return false; // Bei Fehler erlaube Kommentar
+    return false;
   }
 }
 
@@ -63,12 +147,11 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
     const post = document.querySelector(selector);
     if (!post) return false;
     
-    // Suche nach eigenem Username in verschiedenen möglichen Selektoren
     const possibleSelectors = [
-      'header a span', // Username im Post-Header
-      'header a', // Username-Link
-      'div[data-testid="user-avatar"] + div a', // Username neben Avatar
-      'article header span a' // Alternativer Username-Selektor
+      'header a span',
+      'header a', 
+      'div[data-testid="user-avatar"] + div a',
+      'article header span a'
     ];
     
     for (const userSelector of possibleSelectors) {
@@ -121,12 +204,11 @@ async function getPostUrl(page: any, postSelector: string): Promise<string> {
       const post = document.querySelector(selector);
       if (!post) return '';
       
-      // Suche nach Post-Link (normalerweise Timestamp oder "View Post" Link)
       const linkSelectors = [
-        'header a[href*="/p/"]', // Post-Link im Header
-        'a[href*="/p/"]', // Beliebiger Post-Link
-        'time a', // Timestamp-Link
-        'article a[href*="/p/"]' // Post-Link irgendwo im Artikel
+        'header a[href*="/p/"]',
+        'a[href*="/p/"]',
+        'time a',
+        'article a[href*="/p/"]'
       ];
       
       for (const linkSelector of linkSelectors) {
@@ -162,7 +244,7 @@ async function saveCommentToDatabase(
     const comment = new Comment({
       post_id: postId,
       post_url: postUrl,
-      post_caption: caption.substring(0, 500), // Begrenzen für DB
+      post_caption: caption.substring(0, 500),
       post_author: author,
       comment_text: commentText,
       comment_hash: commentHash,
@@ -189,23 +271,22 @@ async function runInstagram() {
     await server.listen();
     const proxyUrl = `http://localhost:8000`;
     const browser = await puppeteer.launch({
-    // Pfad kommt aus der Render‑Env‑Var
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-    headless: true,                        // strikt headless, Chrome > 118
-    args: [
-        `--proxy-server=${proxyUrl}`,       // dein Proxy bleibt erhalten
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-zygote",
-    ],
-});
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+        headless: true,                      
+        args: [
+            `--proxy-server=${proxyUrl}`,     
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-zygote",
+        ],
+    });
 
     const page = await browser.newPage();
     const cookiesPath = "/persistent/Instagramcookies.json";
 
-    const checkCookies = await Instagram_cookiesExist();   // nutzt Default‑Pfad
+    const checkCookies = await Instagram_cookiesExist();
     logger.info(`Checking cookies existence: ${checkCookies}`);
 
     if (checkCookies) {
@@ -213,10 +294,8 @@ async function runInstagram() {
         await page.setCookie(...cookies);
         logger.info('Cookies loaded and set on the page.');
 
-        // Navigate to Instagram to verify if cookies are valid
         await page.goto("https://www.instagram.com/", { waitUntil: 'networkidle2' });
 
-        // Check if login was successful by verifying page content (e.g., user profile or feed)
         const isLoggedIn = await page.$("a[href='/direct/inbox/']");
         if (isLoggedIn) {
             logger.info("Login verified with cookies.");
@@ -225,52 +304,39 @@ async function runInstagram() {
             await loginWithCredentials(page, browser);
         }
     } else {
-        // If no cookies are available, perform login with credentials
         await loginWithCredentials(page, browser);
     }
 
-    // Optionally take a screenshot after loading the page
     await page.screenshot({ path: "logged_in.png" });
-
-    // Navigate to the Instagram homepage
     await page.goto("https://www.instagram.com/");
 
-    // nach dem Login‑Block, vor der while(true)‑Like‑Schleife
+    // 🚀 SICHERER POST-TIMER mit verbesserter Logik
     setInterval(async () => {
-      if (jokeLock) return;          // schon in Arbeit
-      jokeLock = true;
-      try {
-        await postJoke(page);
-      } catch (e) {
-        logger.error("Post‑Fehler: " + e);
-      } finally {
-        jokeLock = false;
-      }
-    }, 3 * 60 * 1000);
+        await safePostJoke(page);
+    }, 3 * 60 * 1000); // Alle 3 Minuten versuchen
 
     // Warte 50 Minuten bevor Kommentieren/Liken startet
     logger.info("Warte 50 Minuten bevor Like/Comment-Aktivität startet...");
-    await delay(1 * 60 * 1000); // 50 Minuten warten
+    await delay(50 * 60 * 1000);
     logger.info("Starte jetzt Like/Comment-Aktivität...");
 
+    // 💬 SICHERE HAUPT-LOOP mit Konflikte-Vermeidung
     while (true) {
-        // Wenn gerade ein Post läuft, kurz warten und eine Runde überspringen
-        if (jokeLock) {
-            logger.info("Posting läuft – warte 30 s …");
-            await delay(30_000);
-            continue;
-        }
-
-        // Likes & Kommentare
-        await interactWithPosts(page);
+        // Sichere Kommentar-Funktion verwenden
+        await safeInteractWithPosts(page);
 
         logger.info("Iteration complete, waiting 30 seconds before refreshing …");
         await delay(30_000);
 
-        try {
-            await page.reload({ waitUntil: "networkidle2" });
-        } catch (e) {
-            logger.warn("Error reloading page, continuing iteration: " + e);
+        // Nur reloaden wenn kein Post läuft
+        if (!isPosting && !systemBusy) {
+            try {
+                await page.reload({ waitUntil: "networkidle2" });
+            } catch (e) {
+                logger.warn("Error reloading page, continuing iteration: " + e);
+            }
+        } else {
+            logger.info("⏸️ Reload übersprungen - System busy");
         }
     }
 }
@@ -280,15 +346,12 @@ const loginWithCredentials = async (page: any, browser: Browser) => {
         await page.goto("https://www.instagram.com/accounts/login/");
         await page.waitForSelector('input[name="username"]');
 
-        // Fill out the login form
-        await page.type('input[name="username"]', IGusername); // Replace with your username
-        await page.type('input[name="password"]', IGpassword); // Replace with your password
+        await page.type('input[name="username"]', IGusername);
+        await page.type('input[name="password"]', IGpassword);
         await page.click('button[type="submit"]');
 
-        // Wait for navigation after login
         await page.waitForNavigation();
 
-        // Save cookies after login
         const cookies = await browser.cookies();
         await saveCookies("/persistent/Instagramcookies.json", cookies);
     } catch (error) {
@@ -297,26 +360,35 @@ const loginWithCredentials = async (page: any, browser: Browser) => {
 }
 
 async function interactWithPosts(page: any) {
-    let postIndex = 1; // Start with the first post
-    const maxPosts = 50; // Limit to prevent infinite scrolling
+    let postIndex = 1;
+    const maxPosts = 50;
 
     while (postIndex <= maxPosts) {
+        // 🔒 KONTINUIERLICHER BUSY-CHECK
+        if (isPosting || systemBusy) {
+            logger.info("🚫 Posting läuft - pausiere Kommentieren");
+            await delay(10_000); // 10s warten und neu prüfen
+            continue;
+        }
+
         try {
             const postSelector = `article:nth-of-type(${postIndex})`;
 
-            // Check if the post exists
             if (!(await page.$(postSelector))) {
                 console.log("No more posts found. Ending iteration...");
                 return;
             }
 
-            // 🔍 ERWEITERTE CHECKS FÜR KOMMENTARE
+            // 🔒 NOCHMALIGER CHECK vor jeder Post-Interaktion
+            if (isPosting || systemBusy) {
+                logger.info("🚫 System wurde busy während Iteration - beende");
+                return;
+            }
 
             // 1. Extrahiere Post-Daten
             const postAuthor = await getPostAuthor(page, postSelector);
             const postUrl = await getPostUrl(page, postSelector);
             
-            // Extract and log the post caption
             const captionSelector = `${postSelector} div.x9f619 span._ap3a div span._ap3a`;
             const captionElement = await page.$(captionSelector);
 
@@ -328,7 +400,6 @@ async function interactWithPosts(page: any) {
                 console.log(`No caption found for post ${postIndex}.`);
             }
 
-            // Check if there is a '...more' link to expand the caption
             const moreLinkSelector = `${postSelector} div.x9f619 span._ap3a span div span.x1lliihq`;
             const moreLink = await page.$(moreLinkSelector);
             if (moreLink) {
@@ -341,7 +412,6 @@ async function interactWithPosts(page: any) {
                 caption = expandedCaption;
             }
 
-            // 2. Generiere eindeutige Post-ID
             const postId = generatePostId(caption, postIndex, postAuthor);
 
             // 3. Prüfe ob es ein eigener Post ist
@@ -349,7 +419,6 @@ async function interactWithPosts(page: any) {
             if (isOwn) {
                 logger.info(`⏭️ Überspringe eigenen Post ${postIndex} von ${postAuthor}`);
                 
-                // Trotzdem liken (eigene Posts liken ist OK)
                 const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
                 const likeButton = await page.$(likeButtonSelector);
                 const ariaLabel = await likeButton?.evaluate((el: Element) =>
@@ -362,7 +431,6 @@ async function interactWithPosts(page: any) {
                     console.log(`Own post ${postIndex} liked.`);
                 }
 
-                // Gehe zum nächsten Post
                 postIndex++;
                 await page.evaluate(() => {
                     window.scrollBy(0, window.innerHeight);
@@ -375,7 +443,6 @@ async function interactWithPosts(page: any) {
             if (alreadyCommented) {
                 logger.info(`⏭️ Post ${postIndex} bereits kommentiert (${postAuthor}) - überspringe`);
                 
-                // Trotzdem liken
                 const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
                 const likeButton = await page.$(likeButtonSelector);
                 const ariaLabel = await likeButton?.evaluate((el: Element) =>
@@ -388,7 +455,6 @@ async function interactWithPosts(page: any) {
                     console.log(`Post ${postIndex} liked.`);
                 }
 
-                // Gehe zum nächsten Post
                 postIndex++;
                 await page.evaluate(() => {
                     window.scrollBy(0, window.innerHeight);
@@ -396,7 +462,7 @@ async function interactWithPosts(page: any) {
                 continue;
             }
 
-            // 5. LIKE LOGIC (unverändert für alle Posts)
+            // 5. LIKE LOGIC
             const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
             const likeButton = await page.$(likeButtonSelector);
             const ariaLabel = await likeButton?.evaluate((el: Element) =>
@@ -413,52 +479,53 @@ async function interactWithPosts(page: any) {
                 console.log(`Like button not found for post ${postIndex}.`);
             }
 
-            // 6. COMMENT LOGIC (nur für neue, fremde Posts)
-            const commentBoxSelector = `${postSelector} textarea`;
-            const commentBox = await page.$(commentBoxSelector);
-            if (commentBox) {
-                logger.info(`💬 Kommentiere neuen Post ${postIndex} von ${postAuthor}...`);
-                
-                const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
-                const schema = getInstagramCommentSchema();
-                const result = await runAgent(schema, prompt);
-                const comment = result[0]?.comment;
+            // 6. COMMENT LOGIC (mit zusätzlichen Busy-Checks)
+            if (!isPosting && !systemBusy) {
+                const commentBoxSelector = `${postSelector} textarea`;
+                const commentBox = await page.$(commentBoxSelector);
+                if (commentBox) {
+                    logger.info(`💬 Kommentiere neuen Post ${postIndex} von ${postAuthor}...`);
+                    
+                    const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
+                    const schema = getInstagramCommentSchema();
+                    const result = await runAgent(schema, prompt);
+                    const comment = result[0]?.comment;
 
-                if (comment) {
-                    await commentBox.type(comment);
+                    if (comment && !isPosting && !systemBusy) { // Nochmaliger Check
+                        await commentBox.type(comment);
 
-                    // New selector approach for the post button
-                    const postButton = await page.evaluateHandle(() => {
-                        const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-                        return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
-                    });
+                        const postButton = await page.evaluateHandle(() => {
+                            const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
+                            return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
+                        });
 
-                    if (postButton) {
-                        console.log(`Posting comment on post ${postIndex}...`);
-                        await postButton.click();
-                        console.log(`Comment posted on post ${postIndex}.`);
-                        
-                        // 7. SPEICHERE KOMMENTAR IN DATABASE
-                        await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
-                        
+                        if (postButton && !isPosting && !systemBusy) { // Final Check
+                            console.log(`Posting comment on post ${postIndex}...`);
+                            await postButton.click();
+                            console.log(`Comment posted on post ${postIndex}.`);
+                            
+                            await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
+                            
+                        } else {
+                            console.log("Post button not found or system became busy.");
+                        }
                     } else {
-                        console.log("Post button not found.");
+                        logger.warn("No comment generated or system became busy, skipping comment.");
                     }
                 } else {
-                    logger.warn("No comment generated by AI, skipping comment.");
+                    console.log("Comment box not found.");
                 }
             } else {
-                console.log("Comment box not found.");
+                logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
             }
 
             // Wait before moving to the next post
-            const baseDelay = 180_000;                     // 3 min = 180 000 ms
-            const jitter    = Math.floor(Math.random() * 30_000); // 0‑30 s extra
+            const baseDelay = 180_000;                     
+            const jitter    = Math.floor(Math.random() * 30_000); 
             const waitTime  = baseDelay + jitter;
             console.log(`Waiting ${waitTime / 1000} seconds before moving to the next post...`);
             await delay(waitTime);
 
-            // Scroll to the next post
             await page.evaluate(() => {
                 window.scrollBy(0, window.innerHeight);
             });
@@ -467,7 +534,6 @@ async function interactWithPosts(page: any) {
         } catch (error) {
             console.error(`Error interacting with post ${postIndex}:`, error);
             
-            // Bei Fehler trotzdem zum nächsten Post
             try {
                 await page.evaluate(() => {
                     window.scrollBy(0, window.innerHeight);
