@@ -20,9 +20,6 @@ let isCommenting = false;     // Kommentar-Funktion läuft
 let systemBusy = false;       // Allgemeiner Busy-Flag
 
 
-
-const Post = mongoose.models.Post || mongoose.model('Post', PostSchema);
-
 // Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
 puppeteer.use(
