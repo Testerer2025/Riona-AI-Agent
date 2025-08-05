@@ -277,9 +277,11 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
 
 // Vereinfachte Own-Post Erkennung
 function isOwnPost(page: any, postSelector: string): Promise<boolean> {
-  return page.evaluate((selector: string) => {
-    const ownUsername = process.env.IGclearusername || 'fallback_username';
-    console.log(`DEBUG: Own username from env: "${ownUsername}"`);
+  // ✅ WICHTIG: Hole Username AUSSERHALB des Browser-Contexts
+  const ownUsername = process.env.IGclearusername || 'fallback_username';
+  
+  return page.evaluate((selector: string, ownUsernameParam: string) => {
+    console.log(`DEBUG: Own username from param: "${ownUsernameParam}"`);
     
     const post = document.querySelector(selector);
     if (!post) {
@@ -314,9 +316,9 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
               !username.match(/^\d+$/) &&
               username.match(/^[a-zA-Z0-9._]+$/)) {
             
-            console.log(`DEBUG: Comparing "${username}" with own "${ownUsername}"`);
+            console.log(`DEBUG: Comparing "${username}" with own "${ownUsernameParam}"`);
             
-            if (username === ownUsername) {
+            if (username === ownUsernameParam) {
               console.log(`DEBUG: ✅ MATCH! This is own post`);
               return true;
             }
@@ -342,9 +344,9 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
           !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
           text.match(/^[a-zA-Z0-9._]+$/)) {
         
-        console.log(`DEBUG: Comparing text "${text}" with own "${ownUsername}"`);
+        console.log(`DEBUG: Comparing text "${text}" with own "${ownUsernameParam}"`);
         
-        if (text === ownUsername) {
+        if (text === ownUsernameParam) {
           console.log(`DEBUG: ✅ MATCH! This is own post (by text)`);
           return true;
         }
@@ -353,8 +355,162 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
     
     console.log(`DEBUG: ❌ NO MATCH - Not own post`);
     return false;
-  }, postSelector);
+  }, postSelector, ownUsername); // ✅ Username als Parameter übergeben!
 }
+
+function generateEmergencyPost(): string {
+  const timestamp = new Date().toISOString().slice(5, 16); // MM-DD HH:MM
+  const randomTopic = [
+    "Heute ist ein neuer Tag für frische Ideen",
+    "Was sind eure Pläne für diese Woche",
+    "Teamwork makes the dream work - wie wahr ist das",
+    "Authentizität ist der Schlüssel zum Erfolg",
+    "Kleine Schritte führen zu großen Zielen"
+  ];
+  
+  const topic = randomTopic[Math.floor(Math.random() * randomTopic.length)];
+  
+  return `${topic}? 💭
+
+Teilt eure Gedanken in den Kommentaren!
+
+#monday #motivation #thoughts #${timestamp.replace(/[-:]/g, '')}`;
+}
+
+// 🔧 FIX 2: Robuste parseSimpleResponse mit besserer Fehlerbehandlung
+function parseSimpleResponse(response: any): string {
+  try {
+    // Debug-Log für bessere Analyse
+    console.log("AI Response Type:", typeof response);
+    console.log("AI Response Value:", JSON.stringify(response));
+    
+    if (Array.isArray(response)) {
+      // ✅ ERWEITERT - alle möglichen Feldnamen:
+      if (response[0]?.instagram_post) return response[0].instagram_post;
+      if (response[0]?.friday_post) return response[0].friday_post;        
+      if (response[0]?.motivational_post) return response[0].motivational_post; 
+      if (response[0]?.agency_post) return response[0].agency_post;        
+      if (response[0]?.tip_post) return response[0].tip_post;              
+      if (response[0]?.witz) return response[0].witz;
+      if (response[0]?.joke) return response[0].joke;
+      if (response[0]?.content) return response[0].content;
+      if (response[0]?.post) return response[0].post;
+      if (typeof response[0] === "string") return response[0];
+    }
+    
+    if (typeof response === "object" && response !== null) {
+      // ✅ ERWEITERT - alle möglichen Feldnamen:
+      if (response.instagram_post) return String(response.instagram_post);
+      if (response.friday_post) return String(response.friday_post);        
+      if (response.motivational_post) return String(response.motivational_post); 
+      if (response.agency_post) return String(response.agency_post);        
+      if (response.tip_post) return String(response.tip_post);              
+      if (response.witz) return String(response.witz);
+      if (response.Witz) return String(response.Witz);
+      if (response.joke) return String(response.joke);
+      if (response.Joke) return String(response.Joke);
+      if (response.content) return String(response.content);
+      if (response.post) return String(response.post);
+    }
+    
+    if (typeof response === "string") {
+      try {
+        const parsed = JSON.parse(response);
+        if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
+          return parsed[0].instagram_post;
+        }
+        if (Array.isArray(parsed) && parsed[0]?.friday_post) {          
+          return parsed[0].friday_post;
+        }
+        if (Array.isArray(parsed) && parsed[0]?.witz) {
+          return parsed[0].witz;
+        }
+        if (parsed?.instagram_post) return parsed.instagram_post;
+        if (parsed?.friday_post) return parsed.friday_post;            
+        if (parsed?.witz) return parsed.witz;
+        return response;
+      } catch {
+        return response;
+      }
+    }
+    
+    // ✅ BESSERES DEBUGGING:
+    console.log("Unerwartetes Datenformat:", JSON.stringify(response));
+    
+    // ✅ SICHERER ZUGRIFF auf Object.keys - KORRIGIERT
+    const responseObj = Array.isArray(response) ? response[0] : response;
+    if (responseObj && typeof responseObj === 'object') {
+      console.log("Verfügbare Felder:", Object.keys(responseObj));
+      
+      // ✅ INTELLIGENTER FALLBACK - verwende ersten String-Wert:
+      const firstValue = Object.values(responseObj)[0];
+      if (typeof firstValue === 'string') {
+        console.log("Verwende ersten String-Wert als Fallback:", firstValue.substring(0, 100));
+        return firstValue;
+      }
+    }
+    
+    // ✅ WENN ALLES FEHLSCHLÄGT: Generiere neuen Post statt Backup
+    console.log("FALLBACK: Generiere neuen Post da AI-Response invalid");
+    return generateEmergencyPost();
+    
+  } catch (error) {
+    console.error("Parse Error:", error);
+    return generateEmergencyPost();
+  }
+}
+
+async function generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
+  try {
+    logger.info("🔍 Analysiere Post-Historie für intelligente Content-Generierung...");
+    
+    // 1. Lade die letzten 50 Posts für umfassende Analyse
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(50)
+      .select('content image_name posted_at post_type');
+    
+    logger.info(`📊 Gefunden: ${recentPosts.length} Posts für Analyse`);
+    
+    // 2. Bei wenigen Posts: Vereinfachte Generierung
+    if (recentPosts.length < 5) {
+      logger.info("📝 Wenige Posts vorhanden - verwende vereinfachte Generierung");
+      
+      const simplePrompt = `
+      Erstelle einen professionellen Instagram-Post für eine Social Media Agentur.
+      
+      Anforderungen:
+      - 300-450 Zeichen
+      - Deutsch
+      - Authentisch und wertvoll
+      - Frage am Ende für Engagement
+      - Relevante Hashtags
+      
+      Themen-Ideen: Marketing-Trends, Team-Erfolge, Kundenbeziehungen, Tools, Branchenentwicklungen
+      
+      Antworte nur mit dem fertigen Post-Text.
+      `;
+      
+      const simpleResponse = await runAgent(null as any, simplePrompt);
+      const postContent = parseSimpleResponse(simpleResponse);
+      const imagePath = await ensureImageExists(postContent);
+      
+      return { content: postContent, imagePath };
+    }
+    
+    // ... Rest der Funktion bleibt gleich wie vorher
+    
+  } catch (error) {
+    logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
+    
+    // NOTFALL-GENERIERUNG
+    const emergencyContent = generateEmergencyPost();
+    const emergencyImagePath = await ensureImageExists(emergencyContent);
+    
+    return { content: emergencyContent, imagePath: emergencyImagePath };
+  }
+}
+
 
 // 🔍 EINFACHE DEBUG-FUNKTION
 async function debugPostStructure(page: any, maxPosts: number = 2): Promise<void> {
@@ -512,6 +668,13 @@ async function runInstagram() {
 
     await page.screenshot({ path: "logged_in.png" });
     await page.goto("https://www.instagram.com/");
+
+    // ✅ DEBUG: Teste Author-Erkennung sofort nach Login
+    logger.info("🔍 Teste Author-Erkennung nach Login...");
+    await debugPostStructure(page, 2);
+    
+    // ✅ DEBUG: Zeige Environment Variable
+    logger.info(`🔍 Eigener Username: "${process.env.IGclearusername}"`);
 
     // 🚀 VERBESSERTER POST-TIMER mit Konflikt-Vermeidung
     setInterval(async () => {
