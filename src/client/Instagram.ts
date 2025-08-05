@@ -11,7 +11,7 @@ import { getInstagramCommentSchema } from "../Agent/schema";
 import { postJoke } from "./postJoke";
 import mongoose from 'mongoose';
 import crypto from 'crypto';
-import { ensureImageExists } from "./postJoke";
+import { ensureImageExists, Post } from "./postJoke";
 
 // 🔒 ERWEITERTE MUTEX-LOGIK
 let isPosting = false;        // Post-Funktion läuft
@@ -33,19 +33,7 @@ const CommentSchema = new mongoose.Schema({
 
 const Comment = mongoose.model('Comment', CommentSchema);
 
-
-const PostSchema = new mongoose.Schema({
-  content: { type: String, required: true },
-  content_hash: { type: String, required: true, unique: true },
-  image_name: { type: String, required: true },
-  image_path: { type: String, required: true },
-  posted_at: { type: Date, default: Date.now },
-  post_type: { type: String, default: 'instagram_post' },
-  success: { type: Boolean, default: true },
-  similarity_score: { type: Number, default: 0 }
-});
-
-const Post = mongoose.model('Post', PostSchema);
+const Post = mongoose.models.Post || mongoose.model('Post', PostSchema);
 
 // Add stealth plugin to puppeteer
 puppeteer.use(StealthPlugin());
