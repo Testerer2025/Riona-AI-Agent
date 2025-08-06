@@ -142,34 +142,68 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
         return 'unknown';
       }
       
-      // 🔍 HREF-BASIERTE STRATEGIE (viel robuster)
-      // Suche nach Links die auf Profile zeigen: /username/
-      const profileLinks = post.querySelectorAll('a[href^="/"][href$="/"], a[href^="/"][href*="/?"]');
+      console.log(`DEBUG: Analyzing post with selector: ${selector}`);
       
-      console.log(`DEBUG: Found ${profileLinks.length} potential profile links`);
+      // 🔍 STRATEGIE 1: Suche nach dem ersten Profile-Link im Header
+      const header = post.querySelector('header');
+      if (header) {
+        const headerLinks = header.querySelectorAll('a[href^="/"]');
+        console.log(`DEBUG: Found ${headerLinks.length} links in header`);
+        
+        for (let i = 0; i < headerLinks.length; i++) {
+          const link = headerLinks[i];
+          const href = link.getAttribute('href');
+          const text = link.textContent?.trim() || '';
+          
+          console.log(`DEBUG: Header link ${i+1}: href="${href}", text="${text}"`);
+          
+          if (href) {
+            const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+            if (match && match[1]) {
+              const username = match[1];
+              
+              // Validierung
+              if (username && 
+                  username.length > 0 && 
+                  username.length <= 30 &&
+                  username !== 'p' &&
+                  username !== 'reel' &&
+                  username !== 'reels' &&
+                  username !== 'tv' &&
+                  username !== 'stories' &&
+                  username !== 'explore' &&
+                  username !== 'accounts' &&
+                  username !== 'direct' &&
+                  !username.includes('audio') &&
+                  !username.includes('hashtag') &&
+                  username.match(/^[a-zA-Z0-9._]+$/)) {
+                
+                console.log(`DEBUG: ✅ VALID USERNAME from header href: "${username}"`);
+                return username;
+              }
+            }
+          }
+        }
+      }
       
-      for (let i = 0; i < profileLinks.length; i++) {
-        const link = profileLinks[i];
+      // 🔍 STRATEGIE 2: Fallback zu allen Links
+      const allLinks = post.querySelectorAll('a[href^="/"]');
+      console.log(`DEBUG: Fallback - checking all ${allLinks.length} links`);
+      
+      for (let i = 0; i < allLinks.length; i++) {
+        const link = allLinks[i];
         const href = link.getAttribute('href');
+        const text = link.textContent?.trim() || '';
         
         if (href) {
-          console.log(`DEBUG: Checking link ${i+1}: ${href}`);
-          
-          // Extrahiere Username aus href
-          let username = '';
-          
-          // Pattern 1: /username/ oder /username/?param=value
           const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
           if (match && match[1]) {
-            username = match[1];
+            const username = match[1];
             
-            console.log(`DEBUG: Extracted username from href: "${username}"`);
-            
-            // ✅ VALIDIERUNG: Ist das ein gültiger Instagram-Username?
             if (username && 
                 username.length > 0 && 
                 username.length <= 30 &&
-                username !== 'p' && // Post-Links /p/xyz ausschließen
+                username !== 'p' &&
                 username !== 'reel' &&
                 username !== 'reels' &&
                 username !== 'tv' &&
@@ -177,80 +211,27 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
                 username !== 'explore' &&
                 username !== 'accounts' &&
                 username !== 'direct' &&
-                !username.includes('audio') && // /reels/audio/xyz
+                !username.includes('audio') &&
                 !username.includes('hashtag') &&
-                !username.match(/^\d+$/) && // Nicht nur Zahlen
-                username.match(/^[a-zA-Z0-9._]+$/)) { // Nur gültige Instagram-Zeichen
-                
-                // ZUSÄTZLICH: Prüfe ob das Link-Element Text enthält (nicht nur Icon)
-                const linkText = link.textContent?.trim() || '';
-                const hasText = linkText.length > 0 && 
-                               linkText !== '•' && 
-                               !linkText.includes('Std.') &&
-                               !linkText.includes('Tag') &&
-                               !linkText.includes('Original-Audio') &&
-                               !linkText.match(/^\d+\s+(Std|Tag|Tage)\.?$/);
-                
-                console.log(`DEBUG: Link text: "${linkText}", hasValidText: ${hasText}`);
-                
-                if (hasText) {
-                  console.log(`DEBUG: ✅ VALID USERNAME FOUND: "${username}" from href: ${href}`);
-                  return username;
-                }
-            } else {
-              console.log(`DEBUG: ❌ Invalid username: "${username}" from href: ${href}`);
+                username.match(/^[a-zA-Z0-9._]+$/)) {
+              
+              // Prüfe ob dieser Link Text enthält oder im Header ist
+              const hasText = text.length > 0 && 
+                             text !== '•' && 
+                             !text.includes('Std.') &&
+                             !text.includes('Tag') &&
+                             !text.includes('Original-Audio');
+              
+              const isInHeader = header?.contains(link);
+              
+              console.log(`DEBUG: Link ${i+1}: username="${username}", hasText=${hasText}, isInHeader=${isInHeader}`);
+              
+              if (hasText || isInHeader) {
+                console.log(`DEBUG: ✅ VALID USERNAME: "${username}"`);
+                return username;
+              }
             }
           }
-        }
-      }
-       // 🔍 FALLBACK: Suche nach span[dir="auto"] mit vernünftigem Text
-      const dirAutoSpans = post.querySelectorAll('span[dir="auto"]');
-      console.log(`DEBUG: Found ${dirAutoSpans.length} span[dir="auto"] elements`);
-      
-      for (let i = 0; i < dirAutoSpans.length; i++) {
-        const span = dirAutoSpans[i];
-        const text = span.textContent?.trim() || '';
-        
-        console.log(`DEBUG: span[dir="auto"] ${i+1}: "${text}"`);
-        
-        if (text && 
-            text.length > 0 && 
-            text.length <= 30 &&
-            !text.includes('•') &&
-            !text.includes('und') &&
-            !text.includes('and') &&
-            !text.includes('Std.') &&
-            !text.includes('Tag') &&
-            !text.includes('Original-Audio') &&
-            !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
-            text.match(/^[a-zA-Z0-9._]+$/)) {
-          
-          console.log(`DEBUG: ✅ VALID USERNAME from span: "${text}"`);
-          return text;
-        }
-      }
-      
-      // 🔍 LETZTE CHANCE: Alle <a> Tags mit Text durchsuchen
-      const allLinks = post.querySelectorAll('a');
-      console.log(`DEBUG: Checking all ${allLinks.length} links for username text`);
-      
-      for (const link of allLinks) {
-        const text = link.textContent?.trim() || '';
-        
-        if (text && 
-            text.length > 0 && 
-            text.length <= 30 &&
-            !text.includes('•') &&
-            !text.includes('und') &&
-            !text.includes('and') &&
-            !text.includes('Std.') &&
-            !text.includes('Tag') &&
-            !text.includes('Original-Audio') &&
-            !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
-            text.match(/^[a-zA-Z0-9._]+$/)) {
-          
-          console.log(`DEBUG: ✅ VALID USERNAME from link text: "${text}"`);
-          return text;
         }
       }
       
@@ -265,11 +246,10 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
 
 // Vereinfachte Own-Post Erkennung
 function isOwnPost(page: any, postSelector: string): Promise<boolean> {
-  // ✅ WICHTIG: Hole Username AUSSERHALB des Browser-Contexts
   const ownUsername = process.env.IGclearusername || 'fallback_username';
   
   return page.evaluate((selector: string, ownUsernameParam: string) => {
-    console.log(`DEBUG: Own username from param: "${ownUsernameParam}"`);
+    console.log(`DEBUG: Own username check: "${ownUsernameParam}"`);
     
     const post = document.querySelector(selector);
     if (!post) {
@@ -277,74 +257,52 @@ function isOwnPost(page: any, postSelector: string): Promise<boolean> {
       return false;
     }
     
-    // 🔍 HREF-BASIERTE STRATEGIE
-    const profileLinks = post.querySelectorAll('a[href^="/"][href$="/"], a[href^="/"][href*="/?"]');
-    
-    for (const link of profileLinks) {
-      const href = link.getAttribute('href');
+    // Prüfe nur Header-Links für Own-Post Detection
+    const header = post.querySelector('header');
+    if (header) {
+      const headerLinks = header.querySelectorAll('a[href^="/"]');
+      console.log(`DEBUG: Checking ${headerLinks.length} header links for own username`);
       
-      if (href) {
-        const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
-        if (match && match[1]) {
-          const username = match[1];
-          
-          if (username && 
-              username.length > 0 && 
-              username.length <= 30 &&
-              username !== 'p' &&
-              username !== 'reel' &&
-              username !== 'reels' &&
-              username !== 'tv' &&
-              username !== 'stories' &&
-              username !== 'explore' &&
-              username !== 'accounts' &&
-              username !== 'direct' &&
-              !username.includes('audio') &&
-              !username.includes('hashtag') &&
-              !username.match(/^\d+$/) &&
-              username.match(/^[a-zA-Z0-9._]+$/)) {
+      for (const link of headerLinks) {
+        const href = link.getAttribute('href');
+        
+        if (href) {
+          const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+          if (match && match[1]) {
+            const username = match[1];
             
-            console.log(`DEBUG: Comparing "${username}" with own "${ownUsernameParam}"`);
-            
-            if (username === ownUsernameParam) {
-              console.log(`DEBUG: ✅ MATCH! This is own post`);
-              return true;
+            if (username && 
+                username.length > 0 && 
+                username.length <= 30 &&
+                username !== 'p' &&
+                username !== 'reel' &&
+                username !== 'reels' &&
+                username !== 'tv' &&
+                username !== 'stories' &&
+                username !== 'explore' &&
+                username !== 'accounts' &&
+                username !== 'direct' &&
+                !username.includes('audio') &&
+                !username.includes('hashtag') &&
+                username.match(/^[a-zA-Z0-9._]+$/)) {
+              
+              console.log(`DEBUG: Comparing header username "${username}" with own "${ownUsernameParam}"`);
+              
+              if (username === ownUsernameParam) {
+                console.log(`DEBUG: ✅ MATCH! This is own post`);
+                return true;
+              }
             }
           }
         }
       }
     }
     
-    // 🔍 FALLBACK: Textbasierte Suche
-    const allLinks = post.querySelectorAll('a');
-    for (const link of allLinks) {
-      const text = link.textContent?.trim() || '';
-      
-      if (text && 
-          text.length > 0 && 
-          text.length <= 30 &&
-          !text.includes('•') &&
-          !text.includes('und') &&
-          !text.includes('and') &&
-          !text.includes('Std.') &&
-          !text.includes('Tag') &&
-          !text.includes('Original-Audio') &&
-          !text.match(/^\d+\s+(Std|Tag|Tage)\.?$/i) &&
-          text.match(/^[a-zA-Z0-9._]+$/)) {
-        
-        console.log(`DEBUG: Comparing text "${text}" with own "${ownUsernameParam}"`);
-        
-        if (text === ownUsernameParam) {
-          console.log(`DEBUG: ✅ MATCH! This is own post (by text)`);
-          return true;
-        }
-      }
-    }
-    
     console.log(`DEBUG: ❌ NO MATCH - Not own post`);
     return false;
-  }, postSelector, ownUsername); // ✅ Username als Parameter übergeben!
+  }, postSelector, ownUsername);
 }
+
 
 function generateEmergencyPost(): string {
   const timestamp = new Date().toISOString().slice(5, 16); // MM-DD HH:MM
@@ -766,6 +724,7 @@ async function runInstagram() {
         const isLoggedIn = await page.$("a[href='/direct/inbox/']");
         if (isLoggedIn) {
             logger.info("Login verified with cookies.");
+            logger.info(`🔍 DEIN USERNAME für Own-Post Detection: "${process.env.IGclearusername}"`);
         } else {
             logger.warn("Cookies invalid or expired. Logging in again...");
             await loginWithCredentials(page, browser);
@@ -888,13 +847,42 @@ async function interactWithPosts(page: any) {
             const captionSelector = `${postSelector} span[dir="auto"], ${postSelector} article span`;
             const captionElement = await page.$(captionSelector);
 
-            let caption = "";
-            if (captionElement) {
-                caption = await captionElement.evaluate((el: HTMLElement) => el.innerText);
-                console.log(`Caption for post ${postIndex}: ${caption}`);
-            } else {
-                console.log(`No caption found for post ${postIndex}.`);
+         let caption = "";
+try {
+    // Versuche mehrere Selektoren für Caption
+    const captionSelectors = [
+        `${postSelector} span[dir="auto"]`, // Haupt-Selektor
+        `${postSelector} article span`,     // Fallback
+        `${postSelector} div[data-testid="post-text"]` // Alternativer Selektor
+    ];
+    
+    for (const captionSel of captionSelectors) {
+        const captionElements = await page.$$(captionSel);
+        if (captionElements.length > 0) {
+            // Nehme das längste Text-Element (vermutlich die Caption)
+            let longestText = "";
+            for (const element of captionElements) {
+                const text = await element.evaluate((el: HTMLElement) => el.innerText?.trim() || '');
+                if (text.length > longestText.length && text.length > 10) {
+                    longestText = text;
+                }
             }
+            
+            if (longestText && longestText.length > 10) {
+                caption = longestText;
+                console.log(`Caption found with selector ${captionSel}: ${caption.substring(0, 100)}...`);
+                break;
+            }
+        }
+    }
+    
+    if (!caption) {
+        console.log(`No caption found for post ${postIndex}.`);
+        caption = `Post ${postIndex} - no caption found`;
+    }
+} catch (captionError) {
+    console.log(`Caption extraction error for post ${postIndex}:`, captionError);
+    caption = `Post ${postIndex} - caption error`;
 
             // Zwischencheck vor More-Link
             if (isPosting || systemBusy) {
@@ -1020,34 +1008,72 @@ async function interactWithPosts(page: any) {
                     const comment = result[0]?.comment;
 
                     // Triple-Check nach AI-Call
-                    if (comment && !isPosting && !systemBusy) {
-                        await commentBox.type(comment);
+                if (!isPosting && !systemBusy) {
+    const commentBoxSelector = `${postSelector} textarea`;
+    const commentBox = await page.$(commentBoxSelector);
+    if (commentBox) {
+        logger.info(`💬 Kommentiere neuen Post ${postIndex} von ${postAuthor}...`);
+        
+        // Check vor AI-Call
+        if (isPosting || systemBusy) {
+            logger.info("🚫 System busy vor AI-Comment - überspringe");
+            postIndex++;
+            await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+            continue;
+        }
+        
+        const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
+        const schema = getInstagramCommentSchema();
+        
+        // Check vor AI-Call
+        if (isPosting || systemBusy) {
+            logger.info("🚫 System busy vor runAgent - überspringe");
+            postIndex++;
+            await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+            continue;
+        }
+        
+        const result = await runAgent(schema, prompt);
+        const comment = result[0]?.comment;
 
-                        const postButton = await page.evaluateHandle(() => {
-                            const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-                            return buttons.find(button => button.textContent === 'Post' && !button.hasAttribute('disabled'));
-                        });
+        // Triple-Check nach AI-Call
+        if (comment && !isPosting && !systemBusy) {
+            await commentBox.type(comment);
 
-                        // Final Check vor Post-Button
-                        if (postButton && !isPosting && !systemBusy) {
-                            console.log(`Posting comment on post ${postIndex}...`);
-                            await postButton.click();
-                            console.log(`Comment posted on post ${postIndex}.`);
-                            
-                            await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
-                            
-                        } else {
-                            console.log("Post button not found or system became busy.");
-                        }
-                    } else {
-                        logger.warn("No comment generated or system became busy, skipping comment.");
-                    }
-                } else {
-                    console.log("Comment box not found.");
+            const postButtonFound = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
+                const postButton = buttons.find(button => 
+                    button.textContent === 'Post' && 
+                    !button.hasAttribute('disabled') &&
+                    button.getAttribute('aria-disabled') !== 'true'
+                );
+                
+                if (postButton) {
+                    postButton.click();
+                    return true;
                 }
+                return false;
+            });
+
+            // Final Check nach Post-Button
+            if (postButtonFound && !isPosting && !systemBusy) {
+                console.log(`Posting comment on post ${postIndex}...`);
+                console.log(`Comment posted on post ${postIndex}.`);
+                
+                await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
+                
             } else {
-                logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
+                console.log("Post button not found or system became busy.");
             }
+        } else {
+            logger.warn("No comment generated or system became busy, skipping comment.");
+        }
+    } else {
+        console.log("Comment box not found.");
+    }
+} else {
+    logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
+}
 
             // Final Check vor Wait
             if (isPosting || systemBusy) {
