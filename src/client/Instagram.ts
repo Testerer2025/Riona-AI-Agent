@@ -1276,45 +1276,97 @@ async function performCommentAction(
             return false;
         }
 
-        // 7. Klicke den ersten validen Post-Button
-        const postButtonFound = await page.evaluate(() => {
-            const buttonSelectors = [
-                'div[role="button"]',
-                'button[type="button"]', 
-                'button',
-                '[data-testid="post-button"]',
-                '[aria-label*="Post"]',
-                '[aria-label*="Posten"]'
+        // 7. Klicke den Comment-Post-Button (NICHT den Share-Button!)
+        const postButtonFound = await page.evaluate((postSel: string) => {
+            console.log(`🔍 Suche Comment-Post-Button im Post: ${postSel}`);
+            
+            // Suche NUR im spezifischen Post-Bereich nach Comment-Buttons
+            const post = document.querySelector(postSel);
+            if (!post) {
+                console.log(`❌ Post nicht gefunden: ${postSel}`);
+                return { found: false, text: null, reason: 'Post nicht gefunden' };
+            }
+            
+            // Suche nach Comment-Bereich im Post
+            const commentSection = post.querySelector('section') || post.querySelector('div[role="button"]')?.closest('section') || post;
+            console.log(`🔍 Comment-Section gefunden: ${!!commentSection}`);
+            
+            // Spezifische Comment-Post-Button Selektoren (NUR im Comment-Bereich!)
+            const commentButtonSelectors = [
+                'button[type="submit"]', // Submit-Button für Kommentare
+                'button:not([aria-label*="Teilen"]):not([aria-label*="Share"]):not([aria-label*="Gefällt"]):not([aria-label*="Like"])', // Alle Buttons außer Share/Like
+                'div[role="button"]:not([aria-label*="Teilen"]):not([aria-label*="Share"])', // Role-Buttons außer Share
             ];
             
-            for (const btnSelector of buttonSelectors) {
-                const buttons = Array.from(document.querySelectorAll(btnSelector));
-                const postButton = buttons.find(button => {
-                    const text = button.textContent?.trim().toLowerCase();
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase();
-                    
-                    return (text === 'post' || 
-                            text === 'posten' || 
-                            text === 'teilen' ||
-                            text === 'share' ||
-                            ariaLabel?.includes('post') ||
-                            ariaLabel?.includes('posten')) &&
-                           !button.hasAttribute('disabled') &&
-                           button.getAttribute('aria-disabled') !== 'true' &&
-                           (button as HTMLElement).offsetParent !== null;
-                }) as HTMLElement;
+            for (const btnSelector of commentButtonSelectors) {
+                const buttons = Array.from(commentSection.querySelectorAll(btnSelector));
+                console.log(`🔍 Gefunden ${buttons.length} Buttons mit Selector: ${btnSelector}`);
                 
-                if (postButton) {
-                    console.log(`🔘 Klicke Post-Button: "${postButton.textContent}"`);
-                    postButton.click();
-                    return { found: true, text: postButton.textContent };
+                for (const button of buttons) {
+                    const text = button.textContent?.trim().toLowerCase() || '';
+                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                    const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
+                    const visible = (button as HTMLElement).offsetParent !== null;
+                    
+                    console.log(`🔍 Button Check: text="${text}", aria="${ariaLabel}", disabled=${disabled}, visible=${visible}`);
+                    
+                    // Filtere explizit Share/Like Buttons aus
+                    const isShareButton = text.includes('teilen') || text.includes('share') || 
+                                         ariaLabel.includes('teilen') || ariaLabel.includes('share');
+                    
+                    const isLikeButton = text.includes('gefällt') || text.includes('like') || 
+                                        ariaLabel.includes('gefällt') || ariaLabel.includes('like');
+                    
+                    // Ist es ein Post/Submit Button?
+                    const isPostButton = (text === 'post' || text === 'posten' || button.getAttribute('type') === 'submit') && 
+                                        !isShareButton && !isLikeButton && !disabled && visible;
+                    
+                    console.log(`🔍 isShareButton: ${isShareButton}, isLikeButton: ${isLikeButton}, isPostButton: ${isPostButton}`);
+                    
+                    if (isPostButton) {
+                        console.log(`✅ Comment-Post-Button gefunden: "${text}" / "${ariaLabel}"`);
+                        (button as HTMLElement).click();
+                        return { found: true, text: text || ariaLabel, reason: 'Comment-Post-Button geklickt' };
+                    }
                 }
             }
             
-            return { found: false, text: null };
-        });
+            // Fallback: Suche nach Button in der Nähe der Textarea
+            const textarea = commentSection.querySelector('textarea');
+            if (textarea) {
+                console.log(`🔍 Fallback: Suche Button nahe Textarea`);
+                
+                // Suche im gleichen Container wie die Textarea
+                const textareaContainer = textarea.closest('div');
+                if (textareaContainer) {
+                    const nearbyButtons = textareaContainer.querySelectorAll('button, div[role="button"]');
+                    console.log(`🔍 Gefunden ${nearbyButtons.length} Buttons nahe Textarea`);
+                    
+                    for (const button of nearbyButtons) {
+                        const text = button.textContent?.trim().toLowerCase() || '';
+                        const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                        const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
+                        
+                        // Sehr spezifisch: Nur Buttons ohne Share/Like Labels
+                        if (!disabled && 
+                            !text.includes('teilen') && !text.includes('share') && 
+                            !text.includes('gefällt') && !text.includes('like') &&
+                            !ariaLabel.includes('teilen') && !ariaLabel.includes('share') &&
+                            !ariaLabel.includes('gefällt') && !ariaLabel.includes('like')) {
+                            
+                            console.log(`✅ Fallback Comment-Button gefunden: "${text}" / "${ariaLabel}"`);
+                            (button as HTMLElement).click();
+                            return { found: true, text: text || ariaLabel || 'fallback', reason: 'Fallback Comment-Button' };
+                        }
+                    }
+                }
+            }
+            
+            console.log(`❌ Kein Comment-Post-Button gefunden`);
+            return { found: false, text: null, reason: 'Kein Comment-Button gefunden' };
+        }, postSelector);
 
-        console.log(`🔘 Post-Button Klick-Result:`, postButtonFound);
+        console.log(`🔘 Comment-Post-Button Result:`, postButtonFound);
 
         if (!postButtonFound.found) {
             console.log(`❌ Post-Button konnte nicht geklickt werden für Post ${postIndex}`);
