@@ -857,17 +857,7 @@ async function interactWithPosts(page: any) {
                 console.log(`Caption extraction error for post ${postIndex}: ${captionError?.message || captionError}`);
                 caption = `Post ${postIndex} - caption extraction failed`;
             }
-    
-    // Fallback wenn keine Caption gefunden
-    if (!caption || caption.length < 15) {
-        caption = `Post ${postIndex} by ${postAuthor} - analyzing content`;
-        console.log(`Using fallback caption for post ${postIndex}`);
-    }
-    
-} catch (captionError: any) {
-    console.log(`Caption extraction error for post ${postIndex}: ${captionError?.message || captionError}`);
-    caption = `Post ${postIndex} - caption extraction failed`;
-}
+
   
 
             if (isPosting || systemBusy) {
