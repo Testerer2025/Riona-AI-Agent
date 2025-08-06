@@ -1170,9 +1170,9 @@ async function performCommentAction(
             return false;
         }
         
-    } catch (commentError) {
-        console.error(`Error commenting on post ${postIndex}:`, commentError);
-        return false;
+    } catch (commentError: any) {
+        console.error(`Error commenting on post ${postIndex}:`, commentError?.message || commentError);
+    return false;
     }
 }
 
