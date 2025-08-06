@@ -883,7 +883,7 @@ try {
 } catch (captionError) {
     console.log(`Caption extraction error for post ${postIndex}:`, captionError);
     caption = `Post ${postIndex} - caption error`;
-
+}
             // Zwischencheck vor More-Link
             if (isPosting || systemBusy) {
                 logger.info("🚫 System busy während Caption-Extraktion - AUSSTIEG");
@@ -1004,10 +1004,6 @@ try {
                         continue;
                     }
                     
-                    const result = await runAgent(schema, prompt);
-                    const comment = result[0]?.comment;
-
-                    // Triple-Check nach AI-Call
                 if (!isPosting && !systemBusy) {
     const commentBoxSelector = `${postSelector} textarea`;
     const commentBox = await page.$(commentBoxSelector);
@@ -1074,7 +1070,7 @@ try {
 } else {
     logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
 }
-                }
+                }}
 
             // Final Check vor Wait
             if (isPosting || systemBusy) {
