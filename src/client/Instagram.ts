@@ -1010,7 +1010,7 @@ try {
             console.log(`Like button not found for post ${postIndex} - trying alternative approach.`);
             
             // Alternative: Suche nach Heart-Icon
-            const heartIcon = await page.evaluate((selector) => {
+            const heartIcon = await page.evaluate((selector: string) => {
                 const post = document.querySelector(selector);
                 if (!post) return false;
                 
@@ -1102,42 +1102,40 @@ try {
         if (comment && !isPosting && !systemBusy) {
             await commentBox.type(comment);
 
-          const postButtonFound = await page.evaluate((postSel) => {
-            // Erweiterte Post-Button Selektoren
-            const buttonSelectors = [
-                'div[role="button"]',
-                'button[type="button"]', 
-                'button',
-                '[data-testid="post-button"]',
-                '[aria-label*="Post"]'
-            ];
+          const postButtonFound = await page.evaluate(() => {
+    const buttonSelectors = [
+        'div[role="button"]',
+        'button[type="button"]', 
+        'button',
+        '[data-testid="post-button"]',
+        '[aria-label*="Post"]'
+    ];
+    
+    for (const btnSelector of buttonSelectors) {
+        const buttons = Array.from(document.querySelectorAll(btnSelector));
+        const postButton = buttons.find(button => {
+            const text = button.textContent?.trim().toLowerCase();
+            const ariaLabel = button.getAttribute('aria-label')?.toLowerCase();
             
-            for (const btnSelector of buttonSelectors) {
-                const buttons = Array.from(document.querySelectorAll(btnSelector));
-                const postButton = buttons.find(button => {
-                    const text = button.textContent?.trim().toLowerCase();
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase();
-                    
-                    return (text === 'post' || 
-                            text === 'posten' || 
-                            text === 'teilen' ||
-                            ariaLabel?.includes('post')) &&
-                           !button.hasAttribute('disabled') &&
-                           button.getAttribute('aria-disabled') !== 'true' &&
-                           // Button muss sichtbar sein
-                           (button as HTMLElement).offsetParent !== null;
-                }) as HTMLElement;
-                
-                if (postButton) {
-                    console.log(`Found post button with selector: ${btnSelector}, text: "${postButton.textContent}"`);
-                    postButton.click();
-                    return true;
-                }
-            }
-            
-            console.log('No post button found with any selector');
-            return false;
-        }, postSelector);
+            return (text === 'post' || 
+                    text === 'posten' || 
+                    text === 'teilen' ||
+                    ariaLabel?.includes('post')) &&
+                   !button.hasAttribute('disabled') &&
+                   button.getAttribute('aria-disabled') !== 'true' &&
+                   (button as HTMLElement).offsetParent !== null;
+        }) as HTMLElement;
+        
+        if (postButton) {
+            console.log(`Found post button with selector: ${btnSelector}, text: "${postButton.textContent}"`);
+            postButton.click();
+            return true;
+        }
+    }
+    
+    console.log('No post button found with any selector');
+    return false;
+});
 
             // Final Check nach Post-Button
             if (postButtonFound && !isPosting && !systemBusy) {
