@@ -798,7 +798,7 @@ try {
     
     for (const captionSel of captionSelectors) {
         try {
-            const captionElements = await page.$$(captionSel);
+            const captionElements = await page.$(captionSel);
             
             // 🔧 KRITISCHER FIX: Array-Check vor Iteration
             if (!captionElements || !Array.isArray(captionElements) || captionElements.length === 0) {
@@ -833,19 +833,30 @@ try {
                         caption = text;
                         console.log(`Caption found: ${text.substring(0, 100)}...`);
                     }
-                } catch (evalError) {
-                    console.log(`Element evaluation error: ${evalError.message}`);
+                } catch (evalError: any) {
+                    console.log(`Element evaluation error: ${evalError?.message || evalError}`);
                     continue;
                 }
             }
             
             if (caption && caption.length > 15) break;
             
-        } catch (selectorError) {
-            console.log(`Selector error for ${captionSel}: ${selectorError.message}`);
+        } catch (selectorError: any) {
+            console.log(`Selector error for ${captionSel}: ${selectorError?.message || selectorError}`);
             continue;
         }
     }
+    
+    // Fallback wenn keine Caption gefunden
+    if (!caption || caption.length < 15) {
+        caption = `Post ${postIndex} by ${postAuthor} - analyzing content`;
+        console.log(`Using fallback caption for post ${postIndex}`);
+    }
+    
+} catch (captionError: any) {
+    console.log(`Caption extraction error for post ${postIndex}: ${captionError?.message || captionError}`);
+    caption = `Post ${postIndex} - caption extraction failed`;
+}
     
     // Fallback wenn keine Caption gefunden
     if (!caption || caption.length < 15) {
