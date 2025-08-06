@@ -1077,13 +1077,17 @@ async function performCommentAction(
     postAuthor: string
 ): Promise<boolean> {
     try {
+        console.log(`\n🔍 DEBUG: Starte Kommentar-Prozess für Post ${postIndex}`);
+        
+        // 1. Comment Box finden
         const commentBoxSelector = `${postSelector} textarea`;
         const commentBox = await page.$(commentBoxSelector);
         
         if (!commentBox) {
-            console.log(`Comment box not found for post ${postIndex}.`);
+            console.log(`❌ Comment box not found for post ${postIndex}.`);
             return false;
         }
+        console.log(`✅ Comment box gefunden für Post ${postIndex}`);
 
         logger.info(`💬 Kommentiere neuen Post ${postIndex} von ${postAuthor}...`);
         
@@ -1092,6 +1096,7 @@ async function performCommentAction(
             return false;
         }
         
+        // 2. AI-Kommentar generieren
         const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
         const schema = getInstagramCommentSchema();
         
@@ -1100,6 +1105,7 @@ async function performCommentAction(
             return false;
         }
         
+        console.log(`🤖 Generiere AI-Kommentar für Post ${postIndex}...`);
         const result = await runAgent(schema, prompt);
         const comment = result[0]?.comment;
 
@@ -1108,10 +1114,78 @@ async function performCommentAction(
             return false;
         }
 
-        await commentBox.type(comment);
-        await delay(1000); // Kurz warten nach Texteingabe
+        console.log(`✅ AI-Kommentar generiert (${comment.length} Zeichen): "${comment}"`);
 
-        // 🔧 KORRIGIERTE Post-Button Logik
+        // 3. Text in Comment Box eingeben
+        console.log(`⌨️ Gebe Text in Comment-Box ein...`);
+        await commentBox.click(); // Stelle sicher, dass Box fokussiert ist
+        await delay(500);
+        
+        await commentBox.type(comment);
+        await delay(2000); // Längere Wartezeit
+        
+        // 4. Prüfe ob Text wirklich eingegeben wurde
+        const inputValue = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
+        console.log(`🔍 Text in Box: "${inputValue}" (${inputValue.length} Zeichen)`);
+        
+        if (!inputValue || inputValue.length === 0) {
+            console.log(`❌ Kein Text in Comment-Box - Abbruch`);
+            return false;
+        }
+
+        // 5. Screenshot vor Post-Button Klick
+        await page.screenshot({ path: `debug_before_post_${postIndex}.png` });
+        console.log(`📸 Screenshot erstellt: debug_before_post_${postIndex}.png`);
+
+        // 6. Post-Button finden und klicken - ERWEITERTE DEBUG-VERSION
+        console.log(`🔍 Suche Post-Button für Post ${postIndex}...`);
+        
+        const postButtonInfo = await page.evaluate(() => {
+            const buttonSelectors = [
+                'div[role="button"]',
+                'button[type="button"]', 
+                'button',
+                '[data-testid="post-button"]',
+                '[aria-label*="Post"]',
+                '[aria-label*="Posten"]'
+            ];
+            
+            const allButtons: any[] = [];
+            
+            for (const btnSelector of buttonSelectors) {
+                const buttons = Array.from(document.querySelectorAll(btnSelector));
+                buttons.forEach((button, index) => {
+                    const text = button.textContent?.trim().toLowerCase() || '';
+                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+                    const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
+                    const visible = (button as HTMLElement).offsetParent !== null;
+                    
+                    allButtons.push({
+                        selector: btnSelector,
+                        index: index,
+                        text: text,
+                        ariaLabel: ariaLabel,
+                        disabled: disabled,
+                        visible: visible,
+                        isPostButton: (text === 'post' || text === 'posten' || text === 'teilen' || text === 'share' || ariaLabel?.includes('post') || ariaLabel?.includes('posten')) && !disabled && visible
+                    });
+                });
+            }
+            
+            return allButtons;
+        });
+
+        console.log(`🔍 Gefundene Buttons:`, JSON.stringify(postButtonInfo, null, 2));
+        
+        const validPostButtons = postButtonInfo.filter(btn => btn.isPostButton);
+        console.log(`✅ Valide Post-Buttons gefunden: ${validPostButtons.length}`);
+
+        if (validPostButtons.length === 0) {
+            console.log(`❌ Kein Post-Button gefunden für Post ${postIndex}`);
+            return false;
+        }
+
+        // 7. Klicke den ersten validen Post-Button
         const postButtonFound = await page.evaluate(() => {
             const buttonSelectors = [
                 'div[role="button"]',
@@ -1140,30 +1214,53 @@ async function performCommentAction(
                 }) as HTMLElement;
                 
                 if (postButton) {
-                    console.log(`Found post button with selector: ${btnSelector}, text: "${postButton.textContent}"`);
+                    console.log(`🔘 Klicke Post-Button: "${postButton.textContent}"`);
                     postButton.click();
-                    return true;
+                    return { found: true, text: postButton.textContent };
                 }
             }
             
-            console.log('No post button found with any selector');
-            return false;
+            return { found: false, text: null };
         });
 
-        if (postButtonFound && !isPosting && !systemBusy) {
-            console.log(`Posting comment on post ${postIndex}...`);
-            console.log(`Comment posted on post ${postIndex}.`);
+        console.log(`🔘 Post-Button Klick-Result:`, postButtonFound);
+
+        if (!postButtonFound.found) {
+            console.log(`❌ Post-Button konnte nicht geklickt werden für Post ${postIndex}`);
+            return false;
+        }
+
+        // 8. Warte und prüfe ob Kommentar wirklich gepostet wurde
+        console.log(`⏳ Warte auf Kommentar-Verarbeitung...`);
+        await delay(3000);
+        
+        // 9. Screenshot nach Post-Button Klick
+        await page.screenshot({ path: `debug_after_post_${postIndex}.png` });
+        console.log(`📸 Screenshot erstellt: debug_after_post_${postIndex}.png`);
+
+        // 10. Prüfe ob Comment-Box geleert wurde (Indikator für erfolgreichen Post)
+        const finalInputValue = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value).catch(() => '');
+        console.log(`🔍 Comment-Box nach Post: "${finalInputValue}"`);
+
+        if (finalInputValue.length === 0) {
+            console.log(`✅ Comment-Box wurde geleert - Kommentar wahrscheinlich erfolgreich`);
+        } else {
+            console.log(`⚠️ Comment-Box noch gefüllt - Kommentar möglicherweise NICHT gepostet`);
+        }
+
+        if (postButtonFound.found && !isPosting && !systemBusy) {
+            console.log(`✅ Post-Prozess abgeschlossen für Post ${postIndex}`);
             
             await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
             return true;
         } else {
-            console.log("Post button not found or system became busy.");
+            console.log(`❌ Post-Prozess fehlgeschlagen für Post ${postIndex}`);
             return false;
         }
         
     } catch (commentError: any) {
-        console.error(`Error commenting on post ${postIndex}:`, commentError?.message || commentError);
-    return false;
+        console.error(`❌ Error commenting on post ${postIndex}:`, commentError?.message || commentError);
+        return false;
     }
 }
 
