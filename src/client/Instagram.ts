@@ -702,7 +702,7 @@ async function runInstagram() {
         
         logger.info("✅ Post-Timer: System frei - starte Post-Prozess");
         await safePostJoke(page);
-    }, 30 * 60 * 1000); // 30 Minuten statt 3 Minuten
+    }, 5 * 60 * 1000); // 30 Minuten statt 3 Minuten
 
     // Warte 5 Minuten bevor Kommentieren/Liken startet
     logger.info("Warte 5 Minuten bevor Like/Comment-Aktivität startet...");
