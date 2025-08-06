@@ -142,92 +142,87 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
         return 'unknown';
       }
       
-      console.log(`DEBUG: Analyzing post with selector: ${selector}`);
+      console.log(`DEBUG: Analyzing post for author...`);
       
-      // 🔍 STRATEGIE 1: Suche nach dem ersten Profile-Link im Header
-      const header = post.querySelector('header');
-      if (header) {
-        const headerLinks = header.querySelectorAll('a[href^="/"]');
-        console.log(`DEBUG: Found ${headerLinks.length} links in header`);
+      // 🔍 STRATEGIE 1: Header-basierte Suche (Instagram-spezifisch)
+      const headerSelectors = [
+        'header a[role="link"]',
+        'article header a',
+        'header div a',
+        'h2 a' // Manchmal ist Username in h2
+      ];
+      
+      for (const headerSel of headerSelectors) {
+        const headerLinks = post.querySelectorAll(headerSel);
+        console.log(`DEBUG: Found ${headerLinks.length} header links with selector: ${headerSel}`);
         
-        for (let i = 0; i < headerLinks.length; i++) {
-          const link = headerLinks[i];
+        for (const link of headerLinks) {
           const href = link.getAttribute('href');
           const text = link.textContent?.trim() || '';
-          
-          console.log(`DEBUG: Header link ${i+1}: href="${href}", text="${text}"`);
           
           if (href) {
             const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
             if (match && match[1]) {
               const username = match[1];
               
-              // Validierung
+              // Validierung für Instagram-Username
               if (username && 
                   username.length > 0 && 
                   username.length <= 30 &&
-                  username !== 'p' &&
-                  username !== 'reel' &&
+                  username !== 'p' && // Posts
+                  username !== 'reel' && 
                   username !== 'reels' &&
-                  username !== 'tv' &&
                   username !== 'stories' &&
                   username !== 'explore' &&
                   username !== 'accounts' &&
-                  username !== 'direct' &&
                   !username.includes('audio') &&
-                  !username.includes('hashtag') &&
                   username.match(/^[a-zA-Z0-9._]+$/)) {
                 
-                console.log(`DEBUG: ✅ VALID USERNAME from header href: "${username}"`);
+                console.log(`DEBUG: ✅ Valid username from href: "${username}"`);
                 return username;
               }
             }
           }
+          
+          // Fallback: Prüfe Link-Text
+          if (text && 
+              text.length > 0 && 
+              text.length <= 30 &&
+              !text.includes('•') &&
+              !text.includes('Std.') &&
+              !text.includes('Tag') &&
+              text.match(/^[a-zA-Z0-9._]+$/)) {
+            
+            console.log(`DEBUG: ✅ Valid username from text: "${text}"`);
+            return text;
+          }
         }
       }
       
-      // 🔍 STRATEGIE 2: Fallback zu allen Links
-      const allLinks = post.querySelectorAll('a[href^="/"]');
-      console.log(`DEBUG: Fallback - checking all ${allLinks.length} links`);
+      console.log('DEBUG: No valid username found in header, trying fallback...');
       
-      for (let i = 0; i < allLinks.length; i++) {
-        const link = allLinks[i];
+      // 🔍 STRATEGIE 2: Alle Profile-Links im Post
+      const allLinks = post.querySelectorAll('a[href^="/"]');
+      for (const link of allLinks) {
         const href = link.getAttribute('href');
-        const text = link.textContent?.trim() || '';
-        
         if (href) {
           const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
           if (match && match[1]) {
             const username = match[1];
-            
             if (username && 
                 username.length > 0 && 
                 username.length <= 30 &&
                 username !== 'p' &&
-                username !== 'reel' &&
-                username !== 'reels' &&
-                username !== 'tv' &&
-                username !== 'stories' &&
-                username !== 'explore' &&
-                username !== 'accounts' &&
-                username !== 'direct' &&
                 !username.includes('audio') &&
-                !username.includes('hashtag') &&
                 username.match(/^[a-zA-Z0-9._]+$/)) {
               
-              // Prüfe ob dieser Link Text enthält oder im Header ist
-              const hasText = text.length > 0 && 
-                             text !== '•' && 
-                             !text.includes('Std.') &&
-                             !text.includes('Tag') &&
-                             !text.includes('Original-Audio');
+              // Zusätzlich: Muss im oberen Bereich des Posts sein
+              const rect = link.getBoundingClientRect();
+              const postRect = post.getBoundingClientRect();
+              const isInUpperHalf = rect.top < (postRect.top + postRect.height / 2);
               
-              const isInHeader = header?.contains(link);
-              
-              console.log(`DEBUG: Link ${i+1}: username="${username}", hasText=${hasText}, isInHeader=${isInHeader}`);
-              
-              if (hasText || isInHeader) {
-                console.log(`DEBUG: ✅ VALID USERNAME: "${username}"`);
+              if (isInUpperHalf) {
+                console.log(`DEBUG: ✅ Valid username from upper post area: "${username}"`);
                 return username;
               }
             }
@@ -235,7 +230,7 @@ async function getPostAuthor(page: any, postSelector: string): Promise<string> {
         }
       }
       
-      console.log('DEBUG: No valid username found, returning unknown');
+      console.log('DEBUG: No valid username found anywhere, returning unknown');
       return 'unknown';
     }, postSelector);
   } catch (error) {
@@ -849,36 +844,50 @@ async function interactWithPosts(page: any) {
 
          let caption = "";
 try {
-    // Versuche mehrere Selektoren für Caption
+    // Priorisierte Caption-Selektoren (Instagram-spezifisch)
     const captionSelectors = [
-        `${postSelector} span[dir="auto"]`, // Haupt-Selektor
-        `${postSelector} article span`,     // Fallback
-        `${postSelector} div[data-testid="post-text"]` // Alternativer Selektor
+        `${postSelector} article > div > div > div > span`, // Hauptcaption-Bereich
+        `${postSelector} span[dir="auto"]`, // Fallback
+        `${postSelector} div[data-testid="post-text"]`, // Alternative
+        `${postSelector} article span` // Letzte Option
     ];
     
     for (const captionSel of captionSelectors) {
         const captionElements = await page.$$(captionSel);
-        if (captionElements.length > 0) {
-            // Nehme das längste Text-Element (vermutlich die Caption)
-            let longestText = "";
-            for (const element of captionElements) {
-                const text = await element.evaluate((el: HTMLElement) => el.innerText?.trim() || '');
-                if (text.length > longestText.length && text.length > 10) {
-                    longestText = text;
+        
+        for (const element of captionElements) {
+            const text = await element.evaluate((el: HTMLElement) => {
+                // Filtere spezifische Instagram-UI Texte
+                const innerText = el.innerText?.trim() || '';
+                
+                // Ignoriere UI-Elemente
+                if (innerText.includes('Für dich vorgeschlagen') ||
+                    innerText.includes('Gefällt') ||
+                    innerText.includes('Kommentare') ||
+                    innerText.includes('Teilen') ||
+                    innerText === '•' ||
+                    innerText.match(/^\d+\s+(Std|Tag|Tage|h|m)/) ||
+                    innerText.length < 15) { // Zu kurze Texte ignorieren
+                    return '';
                 }
-            }
+                
+                return innerText;
+            });
             
-            if (longestText && longestText.length > 10) {
-                caption = longestText;
-                console.log(`Caption found with selector ${captionSel}: ${caption.substring(0, 100)}...`);
-                break;
+            if (text && text.length > 15 && text.length > caption.length) {
+                caption = text;
             }
+        }
+        
+        if (caption && caption.length > 15) {
+            console.log(`Caption found with selector ${captionSel}: ${caption.substring(0, 100)}...`);
+            break;
         }
     }
     
     if (!caption) {
-        console.log(`No caption found for post ${postIndex}.`);
-        caption = `Post ${postIndex} - no caption found`;
+        caption = `Post ${postIndex} - no valid caption found`;
+        console.log(`No meaningful caption found for post ${postIndex}.`);
     }
 } catch (captionError) {
     console.log(`Caption extraction error for post ${postIndex}:`, captionError);
@@ -961,22 +970,79 @@ try {
 
             // 5. LIKE LOGIC mit Busy-Check
             if (!isPosting && !systemBusy) {
-                const likeButtonSelector = `${postSelector} svg[aria-label="Like"]`;
-                const likeButton = await page.$(likeButtonSelector);
-                const ariaLabel = await likeButton?.evaluate((el: Element) =>
+    try {
+        // Erweiterte Like-Button Selektoren
+        const likeButtonSelectors = [
+            `${postSelector} svg[aria-label="Like"]`,
+            `${postSelector} svg[aria-label*="Like"]`, 
+            `${postSelector} svg[aria-label="Gefällt mir"]`,
+            `${postSelector} button svg[aria-label*="Like"]`,
+            `${postSelector} div[role="button"] svg[aria-label*="Like"]`,
+            `${postSelector} [data-testid="like-button"]`
+        ];
+        
+        let likeButtonFound = false;
+        
+        for (const selector of likeButtonSelectors) {
+            const likeButton = await page.$(selector);
+            if (likeButton) {
+                const ariaLabel = await likeButton.evaluate((el: Element) =>
                     el.getAttribute("aria-label")
                 );
-
-                if (ariaLabel === "Like") {
+                
+                console.log(`Found like button with selector: ${selector}, aria-label: ${ariaLabel}`);
+                
+                if (ariaLabel === "Like" || ariaLabel === "Gefällt mir") {
                     console.log(`Liking post ${postIndex}...`);
                     await likeButton.click();
                     console.log(`Post ${postIndex} liked.`);
-                } else if (ariaLabel === "Unlike") {
+                    likeButtonFound = true;
+                    break;
+                } else if (ariaLabel?.includes("Unlike") || ariaLabel?.includes("Gefällt mir nicht mehr")) {
                     console.log(`Post ${postIndex} is already liked.`);
-                } else {
-                    console.log(`Like button not found for post ${postIndex}.`);
+                    likeButtonFound = true;
+                    break;
                 }
             }
+        }
+        
+        if (!likeButtonFound) {
+            console.log(`Like button not found for post ${postIndex} - trying alternative approach.`);
+            
+            // Alternative: Suche nach Heart-Icon
+            const heartIcon = await page.evaluate((selector) => {
+                const post = document.querySelector(selector);
+                if (!post) return false;
+                
+                const heartSelectors = [
+                    'svg path[d*="M16.792 3.904"]', // Heart outline path
+                    'svg[aria-label*="Like"]',
+                    'button[type="button"] svg'
+                ];
+                
+                for (const heartSel of heartSelectors) {
+                    const heart = post.querySelector(heartSel);
+                    if (heart) {
+                        const button = heart.closest('button') || heart.closest('div[role="button"]');
+                        if (button) {
+                            (button as HTMLElement).click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }, postSelector);
+            
+            if (heartIcon) {
+                console.log(`Post ${postIndex} liked via heart icon.`);
+            } else {
+                console.log(`Could not find any like button for post ${postIndex}.`);
+            }
+        }
+    } catch (likeError) {
+        console.log(`Error liking post ${postIndex}:`, likeError);
+    }
+}
 
             // 6. COMMENT LOGIC (mit mehrfachen Busy-Checks)
             if (!isPosting && !systemBusy) {
@@ -1036,20 +1102,42 @@ try {
         if (comment && !isPosting && !systemBusy) {
             await commentBox.type(comment);
 
-            const postButtonFound = await page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-    const postButton = buttons.find(button => 
-        button.textContent === 'Post' && 
-        !button.hasAttribute('disabled') &&
-        button.getAttribute('aria-disabled') !== 'true'
-    ) as HTMLElement; // ← WICHTIG: Cast zu HTMLElement
-    
-    if (postButton) {
-        postButton.click();
-        return true;
-    }
-    return false;
-});
+          const postButtonFound = await page.evaluate((postSel) => {
+            // Erweiterte Post-Button Selektoren
+            const buttonSelectors = [
+                'div[role="button"]',
+                'button[type="button"]', 
+                'button',
+                '[data-testid="post-button"]',
+                '[aria-label*="Post"]'
+            ];
+            
+            for (const btnSelector of buttonSelectors) {
+                const buttons = Array.from(document.querySelectorAll(btnSelector));
+                const postButton = buttons.find(button => {
+                    const text = button.textContent?.trim().toLowerCase();
+                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase();
+                    
+                    return (text === 'post' || 
+                            text === 'posten' || 
+                            text === 'teilen' ||
+                            ariaLabel?.includes('post')) &&
+                           !button.hasAttribute('disabled') &&
+                           button.getAttribute('aria-disabled') !== 'true' &&
+                           // Button muss sichtbar sein
+                           (button as HTMLElement).offsetParent !== null;
+                }) as HTMLElement;
+                
+                if (postButton) {
+                    console.log(`Found post button with selector: ${btnSelector}, text: "${postButton.textContent}"`);
+                    postButton.click();
+                    return true;
+                }
+            }
+            
+            console.log('No post button found with any selector');
+            return false;
+        }, postSelector);
 
             // Final Check nach Post-Button
             if (postButtonFound && !isPosting && !systemBusy) {
