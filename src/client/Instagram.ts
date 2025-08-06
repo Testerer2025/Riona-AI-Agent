@@ -1116,20 +1116,111 @@ async function performCommentAction(
 
         console.log(`✅ AI-Kommentar generiert (${comment.length} Zeichen): "${comment}"`);
 
-        // 3. Text in Comment Box eingeben
+        // 3. Text in Comment Box eingeben - ERWEITERTE VERSION
         console.log(`⌨️ Gebe Text in Comment-Box ein...`);
-        await commentBox.click(); // Stelle sicher, dass Box fokussiert ist
-        await delay(500);
         
-        await commentBox.type(comment);
-        await delay(2000); // Längere Wartezeit
+        // Mehrere Versuche mit verschiedenen Methoden
+        let textInputSuccess = false;
         
-        // 4. Prüfe ob Text wirklich eingegeben wurde
-        const inputValue = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
-        console.log(`🔍 Text in Box: "${inputValue}" (${inputValue.length} Zeichen)`);
+        // Versuch 1: Standard-Methode
+        try {
+            await commentBox.click();
+            await delay(1000);
+            await commentBox.focus();
+            await delay(500);
+            
+            await commentBox.type(comment, { delay: 50 }); // Langsamer tippen
+            await delay(1000);
+            
+            const inputValue1 = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
+            console.log(`🔍 Versuch 1 - Text in Box: "${inputValue1}" (${inputValue1.length} Zeichen)`);
+            
+            if (inputValue1.length > 0) {
+                textInputSuccess = true;
+                console.log(`✅ Versuch 1 erfolgreich`);
+            }
+        } catch (error) {
+            console.log(`❌ Versuch 1 fehlgeschlagen:`, error);
+        }
         
-        if (!inputValue || inputValue.length === 0) {
-            console.log(`❌ Kein Text in Comment-Box - Abbruch`);
+        // Versuch 2: Evaluate-Methode falls Versuch 1 fehlschlägt
+        if (!textInputSuccess) {
+            try {
+                console.log(`🔄 Versuche Methode 2: Direct value assignment`);
+                
+                await commentBox.evaluate((el: HTMLTextAreaElement, text: string) => {
+                    el.focus();
+                    el.value = text;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                }, comment);
+                
+                await delay(1000);
+                
+                const inputValue2 = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
+                console.log(`🔍 Versuch 2 - Text in Box: "${inputValue2}" (${inputValue2.length} Zeichen)`);
+                
+                if (inputValue2.length > 0) {
+                    textInputSuccess = true;
+                    console.log(`✅ Versuch 2 erfolgreich`);
+                }
+            } catch (error) {
+                console.log(`❌ Versuch 2 fehlgeschlagen:`, error);
+            }
+        }
+        
+        // Versuch 3: Alternative Textarea-Suche
+        if (!textInputSuccess) {
+            try {
+                console.log(`🔄 Versuche Methode 3: Alternative Comment-Box Suche`);
+                
+                const alternativeSelectors = [
+                    `${postSelector} textarea[placeholder*="comment"]`,
+                    `${postSelector} textarea[placeholder*="Kommentar"]`, 
+                    `${postSelector} textarea[aria-label*="comment"]`,
+                    `${postSelector} textarea[aria-label*="Kommentar"]`,
+                    `textarea`, // Letzte Option: Alle Textareas
+                ];
+                
+                for (const altSelector of alternativeSelectors) {
+                    const altBox = await page.$(altSelector);
+                    if (altBox) {
+                        console.log(`🔍 Alternative Box gefunden: ${altSelector}`);
+                        
+                        await altBox.click();
+                        await delay(500);
+                        await altBox.type(comment, { delay: 100 });
+                        await delay(1000);
+                        
+                        const inputValue3 = await altBox.evaluate((el: HTMLTextAreaElement) => el.value);
+                        console.log(`🔍 Versuch 3 - Text in Box: "${inputValue3}" (${inputValue3.length} Zeichen)`);
+                        
+                        if (inputValue3.length > 0) {
+                            textInputSuccess = true;
+                            console.log(`✅ Versuch 3 erfolgreich mit ${altSelector}`);
+                            break;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.log(`❌ Versuch 3 fehlgeschlagen:`, error);
+            }
+        }
+        
+        // Final Check
+        if (!textInputSuccess) {
+            console.log(`❌ ALLE Text-Input Versuche fehlgeschlagen für Post ${postIndex}`);
+            return false;
+        }
+        
+        console.log(`✅ Text erfolgreich eingegeben!`);
+        
+        // 4. Prüfe finalen Text-Status
+        const finalInputCheck = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value).catch(() => '');
+        console.log(`🔍 Final check - Text in Box: "${finalInputCheck}" (${finalInputCheck.length} Zeichen)`);
+        
+        if (finalInputCheck.length === 0) {
+            console.log(`❌ Final check fehlgeschlagen - kein Text in Box`);
             return false;
         }
 
