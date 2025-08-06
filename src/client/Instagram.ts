@@ -1177,7 +1177,7 @@ async function performCommentAction(
 
         console.log(`🔍 Gefundene Buttons:`, JSON.stringify(postButtonInfo, null, 2));
         
-        const validPostButtons = postButtonInfo.filter(btn => btn.isPostButton);
+        const validPostButtons = postButtonInfo.filter((btn: any) => btn.isPostButton);
         console.log(`✅ Valide Post-Buttons gefunden: ${validPostButtons.length}`);
 
         if (validPostButtons.length === 0) {
