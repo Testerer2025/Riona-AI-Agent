@@ -1074,6 +1074,7 @@ try {
 } else {
     logger.info(`⏸️ Überspringe Kommentar für Post ${postIndex} - System busy`);
 }
+                }
 
             // Final Check vor Wait
             if (isPosting || systemBusy) {
