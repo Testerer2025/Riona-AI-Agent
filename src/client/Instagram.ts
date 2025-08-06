@@ -693,7 +693,11 @@ async function runInstagram() {
     
     logger.info(`🔍 Eigener Username: "${process.env.IGclearusername}"`);
 
-    // 🔧 KORRIGIERTER POST-TIMER - alle 30 Minuten
+    // 🧪 TEST-MODUS: 5 Minuten (NUR ZUM TESTEN!)
+    // ⚠️ FÜR PRODUCTION: Auf mindestens 30 Minuten ändern!
+    const POST_INTERVAL = process.env.TEST_MODE === 'true' ? 5 * 60 * 1000 : 30 * 60 * 1000;
+    logger.info(`📅 Post-Intervall: ${POST_INTERVAL / (60 * 1000)} Minuten`);
+    
     setInterval(async () => {
         if (systemBusy || isPosting || isCommenting) {
             logger.info("🚫 Post-Timer: System busy - überspringe diesen Zyklus");
@@ -702,7 +706,7 @@ async function runInstagram() {
         
         logger.info("✅ Post-Timer: System frei - starte Post-Prozess");
         await safePostJoke(page);
-    }, 5 * 60 * 1000); // 30 Minuten statt 3 Minuten
+    }, POST_INTERVAL);
 
     // Warte 5 Minuten bevor Kommentieren/Liken startet
     logger.info("Warte 5 Minuten bevor Like/Comment-Aktivität startet...");
