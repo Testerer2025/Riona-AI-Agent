@@ -789,63 +789,74 @@ async function interactWithPosts(page: any) {
             
             // 🔧 KORRIGIERTE Caption-Extraktion
             let caption = "";
-try {
-    const captionSelectors = [
-        `${postSelector} span[dir="auto"]`,
-        `${postSelector} article span`,
-        `${postSelector} div[data-testid="post-text"]`
-    ];
-    
-    for (const captionSel of captionSelectors) {
-        try {
-            const captionElements = await page.$(captionSel);
-            
-            // 🔧 KRITISCHER FIX: Array-Check vor Iteration
-            if (!captionElements || !Array.isArray(captionElements) || captionElements.length === 0) {
-                console.log(`No elements found for selector: ${captionSel}`);
-                continue;
-            }
-            
-            for (const element of captionElements) {
-                if (!element) continue;
+            try {
+                const captionSelectors = [
+                    `${postSelector} span[dir="auto"]`,
+                    `${postSelector} article span`,
+                    `${postSelector} div[data-testid="post-text"]`
+                ];
                 
-                try {
-                    const text = await element.evaluate((el: HTMLElement) => {
-                        if (!el || !el.innerText) return '';
+                for (const captionSel of captionSelectors) {
+                    try {
+                        const captionElements = await page.$$(captionSel);
                         
-                        const innerText = el.innerText.trim();
-                        
-                        // Filter UI-Elemente
-                        if (innerText.includes('Für dich vorgeschlagen') ||
-                            innerText.includes('Gefällt') ||
-                            innerText.includes('Kommentare') ||
-                            innerText.includes('Teilen') ||
-                            innerText === '•' ||
-                            innerText.match(/^\d+\s+(Std|Tag|Tage|h|m)/) ||
-                            innerText.length < 15) {
-                            return '';
+                        // 🔧 KRITISCHER FIX: Prüfe ob Array vorhanden ist
+                        if (!captionElements || captionElements.length === 0) {
+                            console.log(`No elements found for selector: ${captionSel}`);
+                            continue;
                         }
                         
-                        return innerText;
-                    });
-                    
-                    if (text && text.length > 15 && text.length > caption.length) {
-                        caption = text;
-                        console.log(`Caption found: ${text.substring(0, 100)}...`);
+                        for (const element of captionElements) {
+                            if (!element) continue;
+                            
+                            try {
+                                const text = await element.evaluate((el: HTMLElement) => {
+                                    if (!el || !el.innerText) return '';
+                                    
+                                    const innerText = el.innerText.trim();
+                                    
+                                    // Filter UI-Elemente
+                                    if (innerText.includes('Für dich vorgeschlagen') ||
+                                        innerText.includes('Gefällt') ||
+                                        innerText.includes('Kommentare') ||
+                                        innerText.includes('Teilen') ||
+                                        innerText === '•' ||
+                                        innerText.match(/^\d+\s+(Std|Tag|Tage|h|m)/) ||
+                                        innerText.length < 15) {
+                                        return '';
+                                    }
+                                    
+                                    return innerText;
+                                });
+                                
+                                if (text && text.length > 15 && text.length > caption.length) {
+                                    caption = text;
+                                    console.log(`Caption found: ${text.substring(0, 100)}...`);
+                                }
+                            } catch (evalError: any) {
+                                console.log(`Element evaluation error: ${evalError?.message || evalError}`);
+                                continue;
+                            }
+                        }
+                        
+                        if (caption && caption.length > 15) break;
+                        
+                    } catch (selectorError: any) {
+                        console.log(`Selector error for ${captionSel}: ${selectorError?.message || selectorError}`);
+                        continue;
                     }
-                } catch (evalError: any) {
-                    console.log(`Element evaluation error: ${evalError?.message || evalError}`);
-                    continue;
                 }
+                
+                // Fallback wenn keine Caption gefunden
+                if (!caption || caption.length < 15) {
+                    caption = `Post ${postIndex} by ${postAuthor} - analyzing content`;
+                    console.log(`Using fallback caption for post ${postIndex}`);
+                }
+                
+            } catch (captionError: any) {
+                console.log(`Caption extraction error for post ${postIndex}: ${captionError?.message || captionError}`);
+                caption = `Post ${postIndex} - caption extraction failed`;
             }
-            
-            if (caption && caption.length > 15) break;
-            
-        } catch (selectorError: any) {
-            console.log(`Selector error for ${captionSel}: ${selectorError?.message || selectorError}`);
-            continue;
-        }
-    }
     
     // Fallback wenn keine Caption gefunden
     if (!caption || caption.length < 15) {
@@ -857,17 +868,7 @@ try {
     console.log(`Caption extraction error for post ${postIndex}: ${captionError?.message || captionError}`);
     caption = `Post ${postIndex} - caption extraction failed`;
 }
-    
-    // Fallback wenn keine Caption gefunden
-    if (!caption || caption.length < 15) {
-        caption = `Post ${postIndex} by ${postAuthor} - analyzing content`;
-        console.log(`Using fallback caption for post ${postIndex}`);
-    }
-    
-} catch (captionError) {
-    console.log(`Caption extraction error for post ${postIndex}: ${captionError.message}`);
-    caption = `Post ${postIndex} - caption extraction failed`;
-}
+  
 
             if (isPosting || systemBusy) {
                 logger.info("🚫 System busy während Caption-Extraktion - AUSSTIEG");
