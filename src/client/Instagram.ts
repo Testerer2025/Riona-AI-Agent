@@ -1037,19 +1037,19 @@ try {
             await commentBox.type(comment);
 
             const postButtonFound = await page.evaluate(() => {
-                const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-                const postButton = buttons.find(button => 
-                    button.textContent === 'Post' && 
-                    !button.hasAttribute('disabled') &&
-                    button.getAttribute('aria-disabled') !== 'true'
-                );
-                
-                if (postButton) {
-                    postButton.click();
-                    return true;
-                }
-                return false;
-            });
+    const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
+    const postButton = buttons.find(button => 
+        button.textContent === 'Post' && 
+        !button.hasAttribute('disabled') &&
+        button.getAttribute('aria-disabled') !== 'true'
+    ) as HTMLElement; // ← WICHTIG: Cast zu HTMLElement
+    
+    if (postButton) {
+        postButton.click();
+        return true;
+    }
+    return false;
+});
 
             // Final Check nach Post-Button
             if (postButtonFound && !isPosting && !systemBusy) {
