@@ -695,6 +695,7 @@ async function runInstagram() {
 
     // 🧪 TEST-MODUS: 5 Minuten (NUR ZUM TESTEN!)
     // ⚠️ FÜR PRODUCTION: Auf mindestens 30 Minuten ändern!
+    process.env.TEST_MODE = 'true';
     const POST_INTERVAL = process.env.TEST_MODE === 'true' ? 5 * 60 * 1000 : 30 * 60 * 1000;
     logger.info(`📅 Post-Intervall: ${POST_INTERVAL / (60 * 1000)} Minuten`);
     
@@ -709,7 +710,7 @@ async function runInstagram() {
     }, POST_INTERVAL);
 
     // Warte 5 Minuten bevor Kommentieren/Liken startet
-    logger.info("Warte 5 Minuten bevor Like/Comment-Aktivität startet...");
+    logger.info("Warte 10 Minuten bevor Like/Comment-Aktivität startet...");
     await delay(10 * 60 * 1000);
     logger.info("Starte jetzt Like/Comment-Aktivität...");
 
@@ -1114,45 +1115,43 @@ async function performCommentAction(
         await commentBox.type(comment);
         console.log(`✅ Text eingegeben`);
 
-        // 4. Post-Button finden - ORIGINAL-METHODE die funktionierte!
-        console.log(`🔍 Suche Post-Button (Original-Methode)...`);
+        // 4. Post-Button finden - KORRIGIERTE ORIGINAL-METHODE
+        console.log(`🔍 Suche Post-Button (Original-Methode korrigiert)...`);
         
-        const postButton = await page.evaluateHandle(() => {
+        const postButtonFound = await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-            return buttons.find(button => 
+            const postButton = buttons.find(button => 
                 button.textContent === 'Post' && 
                 !button.hasAttribute('disabled')
             );
+            
+            if (postButton) {
+                (postButton as HTMLElement).click();
+                return { found: true, text: 'Post' };
+            }
+            
+            // Fallback: Deutsche Version
+            const postButtonDE = buttons.find(button => 
+                (button.textContent === 'Posten' || button.textContent === 'Post') && 
+                !button.hasAttribute('disabled')
+            );
+            
+            if (postButtonDE) {
+                (postButtonDE as HTMLElement).click();
+                return { found: true, text: postButtonDE.textContent };
+            }
+            
+            return { found: false, text: null };
         });
 
-        if (postButton) {
-            console.log(`✅ Post-Button gefunden - klicke...`);
-            await postButton.click();
+        if (postButtonFound.found) {
+            console.log(`✅ Post-Button "${postButtonFound.text}" gefunden und geklickt`);
             console.log(`✅ Comment posted on post ${postIndex}`);
             
             await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
             return true;
         } else {
             console.log(`❌ Post-Button nicht gefunden`);
-            
-            // Fallback: Deutsche Version
-            const postButtonDE = await page.evaluateHandle(() => {
-                const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
-                return buttons.find(button => 
-                    (button.textContent === 'Posten' || button.textContent === 'Post') && 
-                    !button.hasAttribute('disabled')
-                );
-            });
-            
-            if (postButtonDE) {
-                console.log(`✅ Deutsche Post-Button gefunden - klicke...`);
-                await postButtonDE.click();
-                console.log(`✅ Comment posted on post ${postIndex}`);
-                
-                await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
-                return true;
-            }
-            
             return false;
         }
         
