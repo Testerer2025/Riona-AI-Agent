@@ -1077,7 +1077,7 @@ async function performCommentAction(
     postAuthor: string
 ): Promise<boolean> {
     try {
-        console.log(`\n🔍 DEBUG: Starte Kommentar-Prozess für Post ${postIndex}`);
+        console.log(`🔍 DEBUG: Starte Kommentar-Prozess für Post ${postIndex}`);
         
         // 1. Comment Box finden
         const commentBoxSelector = `${postSelector} textarea`;
@@ -1100,12 +1100,6 @@ async function performCommentAction(
         const prompt = `Craft a thoughtful, engaging, and mature reply to the following post: "${caption}". Ensure the reply is relevant, insightful, and adds value to the conversation. It should reflect empathy and professionalism, and avoid sounding too casual or superficial. also it should be 300 characters or less. and it should not go against instagram Community Standards on spam. so you will have to try your best to humanize the reply`;
         const schema = getInstagramCommentSchema();
         
-        if (isPosting || systemBusy) {
-            logger.info("🚫 System busy vor runAgent - überspringe");
-            return false;
-        }
-        
-        console.log(`🤖 Generiere AI-Kommentar für Post ${postIndex}...`);
         const result = await runAgent(schema, prompt);
         const comment = result[0]?.comment;
 
@@ -1114,290 +1108,51 @@ async function performCommentAction(
             return false;
         }
 
-        console.log(`✅ AI-Kommentar generiert (${comment.length} Zeichen): "${comment}"`);
+        console.log(`✅ AI-Kommentar generiert: "${comment}"`);
 
-        // 3. Text in Comment Box eingeben - ERWEITERTE VERSION
-        console.log(`⌨️ Gebe Text in Comment-Box ein...`);
-        
-        // Mehrere Versuche mit verschiedenen Methoden
-        let textInputSuccess = false;
-        
-        // Versuch 1: Standard-Methode
-        try {
-            await commentBox.click();
-            await delay(1000);
-            await commentBox.focus();
-            await delay(500);
-            
-            await commentBox.type(comment, { delay: 50 }); // Langsamer tippen
-            await delay(1000);
-            
-            const inputValue1 = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
-            console.log(`🔍 Versuch 1 - Text in Box: "${inputValue1}" (${inputValue1.length} Zeichen)`);
-            
-            if (inputValue1.length > 0) {
-                textInputSuccess = true;
-                console.log(`✅ Versuch 1 erfolgreich`);
-            }
-        } catch (error) {
-            console.log(`❌ Versuch 1 fehlgeschlagen:`, error);
-        }
-        
-        // Versuch 2: Evaluate-Methode falls Versuch 1 fehlschlägt
-        if (!textInputSuccess) {
-            try {
-                console.log(`🔄 Versuche Methode 2: Direct value assignment`);
-                
-                await commentBox.evaluate((el: HTMLTextAreaElement, text: string) => {
-                    el.focus();
-                    el.value = text;
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                }, comment);
-                
-                await delay(1000);
-                
-                const inputValue2 = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value);
-                console.log(`🔍 Versuch 2 - Text in Box: "${inputValue2}" (${inputValue2.length} Zeichen)`);
-                
-                if (inputValue2.length > 0) {
-                    textInputSuccess = true;
-                    console.log(`✅ Versuch 2 erfolgreich`);
-                }
-            } catch (error) {
-                console.log(`❌ Versuch 2 fehlgeschlagen:`, error);
-            }
-        }
-        
-        // Versuch 3: Alternative Textarea-Suche
-        if (!textInputSuccess) {
-            try {
-                console.log(`🔄 Versuche Methode 3: Alternative Comment-Box Suche`);
-                
-                const alternativeSelectors = [
-                    `${postSelector} textarea[placeholder*="comment"]`,
-                    `${postSelector} textarea[placeholder*="Kommentar"]`, 
-                    `${postSelector} textarea[aria-label*="comment"]`,
-                    `${postSelector} textarea[aria-label*="Kommentar"]`,
-                    `textarea`, // Letzte Option: Alle Textareas
-                ];
-                
-                for (const altSelector of alternativeSelectors) {
-                    const altBox = await page.$(altSelector);
-                    if (altBox) {
-                        console.log(`🔍 Alternative Box gefunden: ${altSelector}`);
-                        
-                        await altBox.click();
-                        await delay(500);
-                        await altBox.type(comment, { delay: 100 });
-                        await delay(1000);
-                        
-                        const inputValue3 = await altBox.evaluate((el: HTMLTextAreaElement) => el.value);
-                        console.log(`🔍 Versuch 3 - Text in Box: "${inputValue3}" (${inputValue3.length} Zeichen)`);
-                        
-                        if (inputValue3.length > 0) {
-                            textInputSuccess = true;
-                            console.log(`✅ Versuch 3 erfolgreich mit ${altSelector}`);
-                            break;
-                        }
-                    }
-                }
-            } catch (error) {
-                console.log(`❌ Versuch 3 fehlgeschlagen:`, error);
-            }
-        }
-        
-        // Final Check
-        if (!textInputSuccess) {
-            console.log(`❌ ALLE Text-Input Versuche fehlgeschlagen für Post ${postIndex}`);
-            return false;
-        }
-        
-        console.log(`✅ Text erfolgreich eingegeben!`);
-        
-        // 4. Prüfe finalen Text-Status
-        const finalInputCheck = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value).catch(() => '');
-        console.log(`🔍 Final check - Text in Box: "${finalInputCheck}" (${finalInputCheck.length} Zeichen)`);
-        
-        if (finalInputCheck.length === 0) {
-            console.log(`❌ Final check fehlgeschlagen - kein Text in Box`);
-            return false;
-        }
+        // 3. Text eingeben - ORIGINAL-METHODE
+        await commentBox.type(comment);
+        console.log(`✅ Text eingegeben`);
 
-        // 5. Screenshot vor Post-Button Klick
-        await page.screenshot({ path: `debug_before_post_${postIndex}.png` });
-        console.log(`📸 Screenshot erstellt: debug_before_post_${postIndex}.png`);
-
-        // 6. Post-Button finden und klicken - ERWEITERTE DEBUG-VERSION
-        console.log(`🔍 Suche Post-Button für Post ${postIndex}...`);
+        // 4. Post-Button finden - ORIGINAL-METHODE die funktionierte!
+        console.log(`🔍 Suche Post-Button (Original-Methode)...`);
         
-        const postButtonInfo = await page.evaluate(() => {
-            const buttonSelectors = [
-                'div[role="button"]',
-                'button[type="button"]', 
-                'button',
-                '[data-testid="post-button"]',
-                '[aria-label*="Post"]',
-                '[aria-label*="Posten"]'
-            ];
-            
-            const allButtons: any[] = [];
-            
-            for (const btnSelector of buttonSelectors) {
-                const buttons = Array.from(document.querySelectorAll(btnSelector));
-                buttons.forEach((button, index) => {
-                    const text = button.textContent?.trim().toLowerCase() || '';
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                    const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
-                    const visible = (button as HTMLElement).offsetParent !== null;
-                    
-                    allButtons.push({
-                        selector: btnSelector,
-                        index: index,
-                        text: text,
-                        ariaLabel: ariaLabel,
-                        disabled: disabled,
-                        visible: visible,
-                        isPostButton: (text === 'post' || text === 'posten' || text === 'teilen' || text === 'share' || ariaLabel?.includes('post') || ariaLabel?.includes('posten')) && !disabled && visible
-                    });
-                });
-            }
-            
-            return allButtons;
+        const postButton = await page.evaluateHandle(() => {
+            const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
+            return buttons.find(button => 
+                button.textContent === 'Post' && 
+                !button.hasAttribute('disabled')
+            );
         });
 
-        console.log(`🔍 Gefundene Buttons:`, JSON.stringify(postButtonInfo, null, 2));
-        
-        const validPostButtons = postButtonInfo.filter((btn: any) => btn.isPostButton);
-        console.log(`✅ Valide Post-Buttons gefunden: ${validPostButtons.length}`);
-
-        if (validPostButtons.length === 0) {
-            console.log(`❌ Kein Post-Button gefunden für Post ${postIndex}`);
-            return false;
-        }
-
-        // 7. Klicke den Comment-Post-Button (NICHT den Share-Button!)
-        const postButtonFound = await page.evaluate((postSel: string) => {
-            console.log(`🔍 Suche Comment-Post-Button im Post: ${postSel}`);
-            
-            // Suche NUR im spezifischen Post-Bereich nach Comment-Buttons
-            const post = document.querySelector(postSel);
-            if (!post) {
-                console.log(`❌ Post nicht gefunden: ${postSel}`);
-                return { found: false, text: null, reason: 'Post nicht gefunden' };
-            }
-            
-            // Suche nach Comment-Bereich im Post
-            const commentSection = post.querySelector('section') || post.querySelector('div[role="button"]')?.closest('section') || post;
-            console.log(`🔍 Comment-Section gefunden: ${!!commentSection}`);
-            
-            // Spezifische Comment-Post-Button Selektoren (NUR im Comment-Bereich!)
-            const commentButtonSelectors = [
-                'button[type="submit"]', // Submit-Button für Kommentare
-                'button:not([aria-label*="Teilen"]):not([aria-label*="Share"]):not([aria-label*="Gefällt"]):not([aria-label*="Like"])', // Alle Buttons außer Share/Like
-                'div[role="button"]:not([aria-label*="Teilen"]):not([aria-label*="Share"])', // Role-Buttons außer Share
-            ];
-            
-            for (const btnSelector of commentButtonSelectors) {
-                const buttons = Array.from(commentSection.querySelectorAll(btnSelector));
-                console.log(`🔍 Gefunden ${buttons.length} Buttons mit Selector: ${btnSelector}`);
-                
-                for (const button of buttons) {
-                    const text = button.textContent?.trim().toLowerCase() || '';
-                    const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                    const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
-                    const visible = (button as HTMLElement).offsetParent !== null;
-                    
-                    console.log(`🔍 Button Check: text="${text}", aria="${ariaLabel}", disabled=${disabled}, visible=${visible}`);
-                    
-                    // Filtere explizit Share/Like Buttons aus
-                    const isShareButton = text.includes('teilen') || text.includes('share') || 
-                                         ariaLabel.includes('teilen') || ariaLabel.includes('share');
-                    
-                    const isLikeButton = text.includes('gefällt') || text.includes('like') || 
-                                        ariaLabel.includes('gefällt') || ariaLabel.includes('like');
-                    
-                    // Ist es ein Post/Submit Button?
-                    const isPostButton = (text === 'post' || text === 'posten' || button.getAttribute('type') === 'submit') && 
-                                        !isShareButton && !isLikeButton && !disabled && visible;
-                    
-                    console.log(`🔍 isShareButton: ${isShareButton}, isLikeButton: ${isLikeButton}, isPostButton: ${isPostButton}`);
-                    
-                    if (isPostButton) {
-                        console.log(`✅ Comment-Post-Button gefunden: "${text}" / "${ariaLabel}"`);
-                        (button as HTMLElement).click();
-                        return { found: true, text: text || ariaLabel, reason: 'Comment-Post-Button geklickt' };
-                    }
-                }
-            }
-            
-            // Fallback: Suche nach Button in der Nähe der Textarea
-            const textarea = commentSection.querySelector('textarea');
-            if (textarea) {
-                console.log(`🔍 Fallback: Suche Button nahe Textarea`);
-                
-                // Suche im gleichen Container wie die Textarea
-                const textareaContainer = textarea.closest('div');
-                if (textareaContainer) {
-                    const nearbyButtons = textareaContainer.querySelectorAll('button, div[role="button"]');
-                    console.log(`🔍 Gefunden ${nearbyButtons.length} Buttons nahe Textarea`);
-                    
-                    for (const button of nearbyButtons) {
-                        const text = button.textContent?.trim().toLowerCase() || '';
-                        const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
-                        const disabled = button.hasAttribute('disabled') || button.getAttribute('aria-disabled') === 'true';
-                        
-                        // Sehr spezifisch: Nur Buttons ohne Share/Like Labels
-                        if (!disabled && 
-                            !text.includes('teilen') && !text.includes('share') && 
-                            !text.includes('gefällt') && !text.includes('like') &&
-                            !ariaLabel.includes('teilen') && !ariaLabel.includes('share') &&
-                            !ariaLabel.includes('gefällt') && !ariaLabel.includes('like')) {
-                            
-                            console.log(`✅ Fallback Comment-Button gefunden: "${text}" / "${ariaLabel}"`);
-                            (button as HTMLElement).click();
-                            return { found: true, text: text || ariaLabel || 'fallback', reason: 'Fallback Comment-Button' };
-                        }
-                    }
-                }
-            }
-            
-            console.log(`❌ Kein Comment-Post-Button gefunden`);
-            return { found: false, text: null, reason: 'Kein Comment-Button gefunden' };
-        }, postSelector);
-
-        console.log(`🔘 Comment-Post-Button Result:`, postButtonFound);
-
-        if (!postButtonFound.found) {
-            console.log(`❌ Post-Button konnte nicht geklickt werden für Post ${postIndex}`);
-            return false;
-        }
-
-        // 8. Warte und prüfe ob Kommentar wirklich gepostet wurde
-        console.log(`⏳ Warte auf Kommentar-Verarbeitung...`);
-        await delay(3000);
-        
-        // 9. Screenshot nach Post-Button Klick
-        await page.screenshot({ path: `debug_after_post_${postIndex}.png` });
-        console.log(`📸 Screenshot erstellt: debug_after_post_${postIndex}.png`);
-
-        // 10. Prüfe ob Comment-Box geleert wurde (Indikator für erfolgreichen Post)
-        const finalInputValue = await commentBox.evaluate((el: HTMLTextAreaElement) => el.value).catch(() => '');
-        console.log(`🔍 Comment-Box nach Post: "${finalInputValue}"`);
-
-        if (finalInputValue.length === 0) {
-            console.log(`✅ Comment-Box wurde geleert - Kommentar wahrscheinlich erfolgreich`);
-        } else {
-            console.log(`⚠️ Comment-Box noch gefüllt - Kommentar möglicherweise NICHT gepostet`);
-        }
-
-        if (postButtonFound.found && !isPosting && !systemBusy) {
-            console.log(`✅ Post-Prozess abgeschlossen für Post ${postIndex}`);
+        if (postButton) {
+            console.log(`✅ Post-Button gefunden - klicke...`);
+            await postButton.click();
+            console.log(`✅ Comment posted on post ${postIndex}`);
             
             await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
             return true;
         } else {
-            console.log(`❌ Post-Prozess fehlgeschlagen für Post ${postIndex}`);
+            console.log(`❌ Post-Button nicht gefunden`);
+            
+            // Fallback: Deutsche Version
+            const postButtonDE = await page.evaluateHandle(() => {
+                const buttons = Array.from(document.querySelectorAll('div[role="button"]'));
+                return buttons.find(button => 
+                    (button.textContent === 'Posten' || button.textContent === 'Post') && 
+                    !button.hasAttribute('disabled')
+                );
+            });
+            
+            if (postButtonDE) {
+                console.log(`✅ Deutsche Post-Button gefunden - klicke...`);
+                await postButtonDE.click();
+                console.log(`✅ Comment posted on post ${postIndex}`);
+                
+                await saveCommentToDatabase(postId, postUrl, caption, postAuthor, comment, false);
+                return true;
+            }
+            
             return false;
         }
         
