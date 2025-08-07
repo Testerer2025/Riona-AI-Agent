@@ -710,7 +710,7 @@ async function runInstagram() {
 
     // Warte 5 Minuten bevor Kommentieren/Liken startet
     logger.info("Warte 5 Minuten bevor Like/Comment-Aktivität startet...");
-    await delay(5 * 60 * 1000);
+    await delay(10 * 60 * 1000);
     logger.info("Starte jetzt Like/Comment-Aktivität...");
 
     // 💬 SICHERE HAUPT-LOOP mit Konflikte-Vermeidung
