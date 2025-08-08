@@ -70,8 +70,8 @@ export class InstagramBot {
       // Register activity handlers
       this.registerActivityHandlers();
       
-      // Health check endpoint setup
-      this.setupHealthCheck();
+      // TODO: Health check endpoint setup (disabled for now)
+      // this.setupHealthCheck();
       
       this.isRunning = true;
       logger.info("✅ Instagram Bot started successfully!");
@@ -210,7 +210,7 @@ export class InstagramBot {
   private setupHealthCheck(): void {
     // Simple HTTP server for health checks
     const http = require('http');
-    const port = process.env.PORT || 3000;
+    const port = process.env.PORT || 10000; // Use Render's PORT or high fallback
     
     const server = http.createServer((req: any, res: any) => {
       if (req.url === '/health') {
@@ -232,6 +232,12 @@ export class InstagramBot {
     
     server.listen(port, () => {
       logger.info(`🏥 Health check server running on port ${port}`);
+    }).on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.warn(`⚠️ Port ${port} in use, health check disabled`);
+      } else {
+        logger.error('Health check server error:', err);
+      }
     });
   }
 
