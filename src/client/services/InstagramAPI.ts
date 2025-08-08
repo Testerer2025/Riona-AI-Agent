@@ -471,50 +471,56 @@ export class InstagramAPI {
    * Extract post author
    */
   private async extractPostAuthor(postSelector: string): Promise<string> {
-  return await this.page!.evaluate((selector: string) => {
+  // 1. Header-HTML und Author gemeinsam aus dem Browser-Kontext zurückgeben:
+  const result = await this.page!.evaluate((selector: string) => {
     const post = document.querySelector(selector);
-    if (!post) {
-      console.log(`[extractPostAuthor] Kein Post für Selector: ${selector}`);
-      return 'unknown';
-    }
+    if (!post) return JSON.stringify({ author: 'unknown', headerHTML: '[kein post gefunden]' });
 
-    // 1. DEBUG: Poste mal den Header-HTML-Inhalt ins Log!
     const header = post.querySelector('header');
-    if (header) {
-      console.log(`[extractPostAuthor] Header HTML:`, header.innerHTML);
-    } else {
-      console.log(`[extractPostAuthor] Kein Header im Post gefunden!`);
-    }
+    let headerHTML = header ? header.innerHTML : '[kein header gefunden]';
 
-    // 2. Suche wie gehabt nach dem Profil-Link im Header
-    const headerLink = post.querySelector('header a[href^="/"][role="link"]');
+    // Versuch: Profil-Link im Header
+    const headerLink = post.querySelector('header a[href^="/"]');
     if (headerLink) {
       const url = headerLink.getAttribute('href') || '';
       const match = url.match(/^\/([^/]+)\//);
       if (match && match[1]) {
-        console.log(`[extractPostAuthor] Author gefunden im Header-Link: ${match[1]}`);
-        return match[1];
+        return JSON.stringify({ author: match[1], headerHTML });
       }
     }
 
-    // 3. Fallback: alle a-Tags im Header prüfen
+    // Fallback: alle a-Tags im Header
     if (header) {
       const allLinks = header.querySelectorAll('a[href^="/"]');
       for (let link of allLinks) {
         const url = link.getAttribute('href') || '';
         const match = url.match(/^\/([^/]+)\//);
         if (match && match[1]) {
-          console.log(`[extractPostAuthor] Author gefunden im Fallback-Link: ${match[1]}`);
-          return match[1];
+          return JSON.stringify({ author: match[1], headerHTML });
         }
       }
     }
 
-    // 4. Nix gefunden
-    console.log(`[extractPostAuthor] Kein Author gefunden, return 'unknown'`);
-    return 'unknown';
+    // Nix gefunden
+    return JSON.stringify({ author: 'unknown', headerHTML });
   }, postSelector);
+
+  // 2. Ergebnis im Node auswerten:
+  try {
+    const { author, headerHTML } = JSON.parse(result);
+    if (author === 'unknown') {
+      logger.warn(`[extractPostAuthor] Kein Author gefunden! Header-HTML: ${headerHTML}`);
+    } else {
+      logger.info(`[extractPostAuthor] Author erkannt: "${author}"`);
+    }
+    // (Optional: Du kannst headerHTML noch an eine Datei anhängen oder so)
+    return author;
+  } catch (e) {
+    logger.error(`[extractPostAuthor] Fehler beim Parsen:`, e, 'RAW:', result);
+    return 'unknown';
+  }
 }
+
 
 
 
