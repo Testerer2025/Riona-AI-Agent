@@ -468,12 +468,17 @@ export class InstagramAPI {
   }
 
   /**
-   * Extract post author
+   * Extract post author - IMPROVED VERSION based on old working code
    */
   private async extractPostAuthor(postSelector: string): Promise<string> {
     return await this.page!.evaluate((selector: string) => {
       const post = document.querySelector(selector);
-      if (!post) return 'unknown';
+      if (!post) {
+        console.log(`DEBUG: Post not found with selector: ${selector}`);
+        return 'unknown';
+      }
+      
+      console.log(`DEBUG: Analyzing post for author...`);
       
       const headerSelectors = [
         'header a[role="link"]',
@@ -484,6 +489,7 @@ export class InstagramAPI {
       
       for (const headerSel of headerSelectors) {
         const headerLinks = post.querySelectorAll(headerSel);
+        console.log(`DEBUG: Found ${headerLinks.length} header links with selector: ${headerSel}`);
         
         for (const link of headerLinks) {
           const href = link.getAttribute('href');
@@ -506,6 +512,58 @@ export class InstagramAPI {
                   !username.includes('audio') &&
                   username.match(/^[a-zA-Z0-9._]+$/)) {
                 
+                console.log(`DEBUG: ✅ Valid username from href: "${username}"`);
+                return username;
+              }
+            }
+          }
+          
+          if (text && 
+              text.length > 0 && 
+              text.length <= 30 &&
+              !text.includes('•') &&
+              !text.includes('Std.') &&
+              !text.includes('Tag') &&
+              text.match(/^[a-zA-Z0-9._]+$/)) {
+            
+            console.log(`DEBUG: ✅ Valid username from text: "${text}"`);
+            return text;
+          }
+        }
+      }
+      
+      console.log('DEBUG: No valid username found in header, trying fallback...');
+      
+      // Extended fallback - try all links in upper part of post
+      const allLinks = post.querySelectorAll('a[href^="/"]');
+      for (const link of allLinks) {
+        const href = link.getAttribute('href');
+        if (href) {
+          const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+          if (match && match[1]) {
+            const username = match[1];
+            if (username && 
+                username.length > 0 && 
+                username.length <= 30 &&
+                username !== 'p' &&
+                username !== 'reel' &&
+                username !== 'reels' &&
+                username !== 'tv' &&
+                username !== 'stories' &&
+                username !== 'explore' &&
+                username !== 'accounts' &&
+                username !== 'direct' &&
+                !username.includes('audio') &&
+                !username.includes('hashtag') &&
+                username.match(/^[a-zA-Z0-9._]+$/)) {
+              
+              // Check if link is in upper half of post (likely author link)
+              const rect = link.getBoundingClientRect();
+              const postRect = post.getBoundingClientRect();
+              const isInUpperHalf = rect.top < (postRect.top + postRect.height / 2);
+              
+              if (isInUpperHalf) {
+                console.log(`DEBUG: ✅ Valid username from upper post area: "${username}"`);
                 return username;
               }
             }
@@ -513,6 +571,7 @@ export class InstagramAPI {
         }
       }
       
+      console.log('DEBUG: No valid username found anywhere, returning unknown');
       return 'unknown';
     }, postSelector);
   }
