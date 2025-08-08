@@ -215,7 +215,7 @@ export class HistoryService {
       
       // Extract and count words (excluding common words)
       const words = content.match(/\b[a-zäöüß]+\b/g) || [];
-      const meaningfulWords = words.filter(word => 
+      const meaningfulWords = words.filter(word =>
         word.length > 3 && 
         !this.isCommonWord(word)
       );
