@@ -257,8 +257,8 @@ export class InstagramBot {
           await this.handlePostingActivity();
         }
         
-        // Handle commenting and liking when idle
-        if (status.currentActivity === ActivityType.IDLE && !status.isProcessing) {
+        // Handle commenting and liking when idle - TEMPORARILY DISABLED FOR TESTING
+        if (false && status.currentActivity === ActivityType.IDLE && !status.isProcessing) {
           await this.handleEngagementActivities();
         }
         
