@@ -71,8 +71,7 @@ export class InstagramBot {
       this.registerActivityHandlers();
       
       // Health check endpoint setup
-      this.setupHealthCheck();
-      
+        
       this.isRunning = true;
       logger.info("✅ Instagram Bot started successfully!");
       
@@ -202,37 +201,6 @@ export class InstagramBot {
     // Note: In a more advanced implementation, we could use an event system
     // For now, we'll handle activities directly in the main loop
     logger.info("📋 Activity handlers registered");
-  }
-
-  /**
-   * Setup health check for Render.com
-   */
-  private setupHealthCheck(): void {
-    // Simple HTTP server for health checks
-    const http = require('http');
-    const port = process.env.PORT || 3000;
-    
-    const server = http.createServer((req: any, res: any) => {
-      if (req.url === '/health') {
-        const status = this.activityManager.getStatus();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          status: 'healthy',
-          uptime: process.uptime(),
-          bot: {
-            running: this.isRunning,
-            ...status
-          }
-        }));
-      } else {
-        res.writeHead(404);
-        res.end('Not Found');
-      }
-    });
-    
-    server.listen(port, () => {
-      logger.info(`🏥 Health check server running on port ${port}`);
-    });
   }
 
   /**
