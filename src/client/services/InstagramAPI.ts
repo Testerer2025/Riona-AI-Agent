@@ -473,36 +473,49 @@ export class InstagramAPI {
   private async extractPostAuthor(postSelector: string): Promise<string> {
   return await this.page!.evaluate((selector: string) => {
     const post = document.querySelector(selector);
-    if (!post) return 'unknown';
+    if (!post) {
+      console.log(`[extractPostAuthor] Kein Post für Selector: ${selector}`);
+      return 'unknown';
+    }
 
-    // Neuer Versuch: Suche nach dem ersten Profil-Link im Header
+    // 1. DEBUG: Poste mal den Header-HTML-Inhalt ins Log!
+    const header = post.querySelector('header');
+    if (header) {
+      console.log(`[extractPostAuthor] Header HTML:`, header.innerHTML);
+    } else {
+      console.log(`[extractPostAuthor] Kein Header im Post gefunden!`);
+    }
+
+    // 2. Suche wie gehabt nach dem Profil-Link im Header
     const headerLink = post.querySelector('header a[href^="/"][role="link"]');
     if (headerLink) {
       const url = headerLink.getAttribute('href') || '';
-      // Instagram-Profile sind immer als "/username/"
       const match = url.match(/^\/([^/]+)\//);
       if (match && match[1]) {
+        console.log(`[extractPostAuthor] Author gefunden im Header-Link: ${match[1]}`);
         return match[1];
       }
     }
 
-    // Fallback: alle a-Tags im Header auslesen
-    const header = post.querySelector('header');
+    // 3. Fallback: alle a-Tags im Header prüfen
     if (header) {
       const allLinks = header.querySelectorAll('a[href^="/"]');
       for (let link of allLinks) {
         const url = link.getAttribute('href') || '';
         const match = url.match(/^\/([^/]+)\//);
         if (match && match[1]) {
+          console.log(`[extractPostAuthor] Author gefunden im Fallback-Link: ${match[1]}`);
           return match[1];
         }
       }
     }
 
-    // Sonst unknown zurückgeben
+    // 4. Nix gefunden
+    console.log(`[extractPostAuthor] Kein Author gefunden, return 'unknown'`);
     return 'unknown';
   }, postSelector);
 }
+
 
 
   /**
