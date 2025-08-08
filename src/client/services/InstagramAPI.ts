@@ -471,51 +471,39 @@ export class InstagramAPI {
    * Extract post author
    */
   private async extractPostAuthor(postSelector: string): Promise<string> {
-    return await this.page!.evaluate((selector: string) => {
-      const post = document.querySelector(selector);
-      if (!post) return 'unknown';
-      
-      const headerSelectors = [
-        'header a[role="link"]',
-        'article header a',
-        'header div a',
-        'h2 a'
-      ];
-      
-      for (const headerSel of headerSelectors) {
-        const headerLinks = post.querySelectorAll(headerSel);
-        
-        for (const link of headerLinks) {
-          const href = link.getAttribute('href');
-          const text = link.textContent?.trim() || '';
-          
-          if (href) {
-            const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
-            if (match && match[1]) {
-              const username = match[1];
-              
-              if (username && 
-                  username.length > 0 && 
-                  username.length <= 30 &&
-                  username !== 'p' && 
-                  username !== 'reel' && 
-                  username !== 'reels' &&
-                  username !== 'stories' &&
-                  username !== 'explore' &&
-                  username !== 'accounts' &&
-                  !username.includes('audio') &&
-                  username.match(/^[a-zA-Z0-9._]+$/)) {
-                
-                return username;
-              }
-            }
-          }
+  return await this.page!.evaluate((selector: string) => {
+    const post = document.querySelector(selector);
+    if (!post) return 'unknown';
+
+    // Neuer Versuch: Suche nach dem ersten Profil-Link im Header
+    const headerLink = post.querySelector('header a[href^="/"][role="link"]');
+    if (headerLink) {
+      const url = headerLink.getAttribute('href') || '';
+      // Instagram-Profile sind immer als "/username/"
+      const match = url.match(/^\/([^/]+)\//);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    // Fallback: alle a-Tags im Header auslesen
+    const header = post.querySelector('header');
+    if (header) {
+      const allLinks = header.querySelectorAll('a[href^="/"]');
+      for (let link of allLinks) {
+        const url = link.getAttribute('href') || '';
+        const match = url.match(/^\/([^/]+)\//);
+        if (match && match[1]) {
+          return match[1];
         }
       }
-      
-      return 'unknown';
-    }, postSelector);
-  }
+    }
+
+    // Sonst unknown zurückgeben
+    return 'unknown';
+  }, postSelector);
+}
+
 
   /**
    * Extract post caption - FIXED VERSION
