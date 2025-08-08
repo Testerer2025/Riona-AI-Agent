@@ -251,8 +251,8 @@ export class InstagramBot {
       try {
         const status = this.activityManager.getStatus();
         
-        // Handle posting activity
-        if (status.currentActivity === ActivityType.POSTING) {
+        // Handle posting activity - REAL IMPLEMENTATION
+        if (status.currentActivity === ActivityType.POSTING && status.isProcessing) {
           await this.handlePostingActivity();
         }
         
@@ -272,7 +272,7 @@ export class InstagramBot {
   }
 
   /**
-   * Handle posting activity
+   * Handle posting activity - REAL IMPLEMENTATION with original postJoke
    */
   private async handlePostingActivity(): Promise<void> {
     try {
@@ -281,59 +281,327 @@ export class InstagramBot {
       // Navigate to home page
       await this.instagramAPI.navigateToHome();
       
-      // Check for duplicate content using history service
-      const historyGuidelines = await this.historyService.analyzeRecentPosts();
-      
-      // Generate content with history awareness
-      const content = await this.contentService.generatePost({
-        avoidKeywords: historyGuidelines.avoidKeywords || [],
-        preferredTopics: historyGuidelines.recommendedTopics || []
-      });
-      
-      // Validate content isn't duplicate
-      const isDuplicate = await this.historyService.isDuplicate(content.contentHash);
-      if (isDuplicate) {
-        logger.warn("⚠️ Generated content is duplicate, regenerating...");
-        const newContent = await this.contentService.generatePost();
-        await this.executePost(newContent);
-      } else {
-        await this.executePost(content);
-      }
-      
-    } catch (error) {
-      logger.error("❌ Posting activity failed:", error);
-      // Activity manager will handle cleanup
-    }
-  }
-
-  /**
-   * Execute actual posting
-   */
-  private async executePost(content: GeneratedContent): Promise<void> {
-    try {
-      logger.info(`📤 Posting content: "${content.text.substring(0, 100)}..."`);
-      
-      // Get appropriate image
-      const imagePath = await this.imageManager.getImageForCategory(content.imageCategory);
-      
-      // Upload and post via Instagram API
-      await this.instagramAPI.createPost(content.text, imagePath);
-      
-      // Save to history
-      await this.historyService.savePost({
-        content: content.text,
-        contentHash: content.contentHash,
-        postType: content.postType,
-        imagePath,
-        imageCategory: content.imageCategory
-      });
+      // Use original postJoke function (integrated)
+      await this.postJoke(this.page!);
       
       logger.info("✅ Post created successfully");
       
     } catch (error) {
-      logger.error("❌ Post execution failed:", error);
+      logger.error("❌ Posting activity failed:", error);
       throw error;
     }
+  }
+
+  /**
+   * Original postJoke function - integrated into new architecture
+   */
+  private async postJoke(page: Page): Promise<void> {
+    try {
+      logger.info("🚀 Starte intelligente Post-Erstellung mit Historie-Analyse...");
+
+      // Generate post based on history analysis
+      const { content: jokeContent, imagePath } = await this.generateUniquePostBasedOnHistory();
+      
+      // Basic duplicate check
+      const validation = await this.checkBasicDuplicates(jokeContent, imagePath);
+      let finalImagePath = imagePath;
+      
+      if (!validation.isValid && validation.reason === 'recent_duplicate_image') {
+        logger.info("🔄 Wähle anderes Bild wegen Recent-Duplikat...");
+        finalImagePath = await this.imageManager.getImageForCategory(this.imageManager.determineCategoryFromContent(jokeContent));
+        logger.info(`📷 Neues Bild gewählt: ${path.basename(finalImagePath)}`);
+      }
+      
+      logger.info(`📝 Finaler Post-Text: "${jokeContent.substring(0, 100)}..."`);
+      logger.info(`🖼️ Gewähltes Bild: ${path.basename(finalImagePath)}`);
+
+      // Navigate to Instagram home
+      await page.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+      await this.delay(2000);
+
+      // Find and click "+" icon
+      await this.clickCreateButton(page);
+
+      // Upload image
+      await this.uploadImage(page, finalImagePath);
+
+      // Skip editing steps (2x Next)
+      for (let i = 0; i < 2; i++) {
+        logger.info(`Klicke Weiter-Button ${i + 1}/2`);
+        await this.clickNextButton(page);
+        await this.delay(2000);
+      }
+
+      // Add caption
+      logger.info("Beginne Caption-Eingabe...");
+      await this.findAndFillCaption(page, jokeContent);
+
+      logger.info("Warte 5 Sekunden damit Instagram Text verarbeitet...");
+      await this.delay(5000);
+
+      // Share the post
+      await this.clickShareButton(page);
+      
+      logger.info("Warte 15 Sekunden auf Upload-Completion...");
+      await this.delay(15000);
+      
+      // Check if post was successful
+      try {
+        await page.waitForSelector('div[role="dialog"]', { timeout: 3000, hidden: true });
+        logger.info("✅ Post erfolgreich geteilt - Dialog verschwunden!");
+        
+        // Save to database AFTER successful posting
+        await this.savePostToDatabase(jokeContent, finalImagePath);
+        
+      } catch (e) {
+        logger.warn("⚠️ Dialog noch sichtbar - Post möglicherweise nicht erfolgreich");
+        // Save anyway - might have been successful
+        await this.savePostToDatabase(jokeContent, finalImagePath);
+      }
+      
+    } catch (error) {
+      logger.error("Gesamter Post-Prozess fehlgeschlagen:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate unique post based on history analysis
+   */
+  private async generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
+    try {
+      // Use the new HistoryService and ContentService
+      const historyGuidelines = await this.historyService.analyzeRecentPosts();
+      
+      const content = await this.contentService.generatePost({
+        avoidKeywords: historyGuidelines.avoidKeywords,
+        preferredTopics: historyGuidelines.recommendedTopics
+      });
+      
+      const imagePath = await this.imageManager.getImageForCategory(content.imageCategory);
+      
+      return { content: content.text, imagePath };
+      
+    } catch (error) {
+      logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
+      
+      // Fallback
+      const fallbackContent = await this.contentService.generatePost();
+      const fallbackImagePath = await this.imageManager.getImageForCategory('default');
+      
+      return { content: fallbackContent.text, imagePath: fallbackImagePath };
+    }
+  }
+
+  /**
+   * Check for basic duplicates
+   */
+  private async checkBasicDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+    const isValidContent = !(await this.historyService.isDuplicate(
+      require('crypto').createHash('md5').update(content).digest('hex')
+    ));
+    
+    if (!isValidContent) {
+      return { isValid: false, reason: 'exact_content_duplicate' };
+    }
+    
+    return { isValid: true };
+  }
+
+  /**
+   * Save post to database
+   */
+  private async savePostToDatabase(content: string, imagePath: string): Promise<void> {
+    const contentHash = require('crypto').createHash('md5').update(content).digest('hex');
+    
+    await this.historyService.savePost({
+      content,
+      contentHash,
+      postType: 'instagram_post',
+      imagePath,
+      imageCategory: this.imageManager.determineCategoryFromContent(content)
+    });
+    
+    logger.info(`✅ Post in MongoDB gespeichert:`);
+    logger.info(`📝 Content (${content.length} Zeichen): "${content}"`);
+    logger.info(`🖼️ Image: ${path.basename(imagePath)}`);
+    logger.info(`🔗 Hash: ${contentHash.substring(0, 12)}...`);
+  }
+
+  /**
+   * Click create button (+ icon)
+   */
+  private async clickCreateButton(page: Page): Promise<void> {
+    const plusSelectors = [
+      'svg[aria-label*="New post"]',
+      'svg[aria-label*="Create"]', 
+      'svg[aria-label*="Neuer Beitrag"]',
+      'svg[aria-label*="Beitrag erstellen"]',
+      'a[href="#"] svg',
+      'div[role="menuitem"] svg'
+    ];
+
+    let plusFound = false;
+    for (const selector of plusSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 5000, visible: true });
+        await page.click(selector);
+        plusFound = true;
+        logger.info(`Plus-Icon gefunden mit Selektor: ${selector}`);
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+
+    if (!plusFound) {
+      throw new Error("Plus-Icon nicht gefunden");
+    }
+
+    await this.delay(2000);
+  }
+
+  /**
+   * Upload image file
+   */
+  private async uploadImage(page: Page, imagePath: string): Promise<void> {
+    try {
+      const fileSel = 'input[type="file"][accept*="image"]';
+      await page.waitForSelector(fileSel, { timeout: 15_000 });
+      const fileInput = await page.$(fileSel);
+      if (!fileInput) throw new Error("Kein Datei‑Input gefunden!");
+      
+      await fileInput.uploadFile(imagePath);
+      logger.info("Bild erfolgreich hochgeladen");
+      await this.delay(3000);
+      
+    } catch (error) {
+      logger.error("Fehler beim Datei-Upload:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Click Next button
+   */
+  private async clickNextButton(page: Page, timeout = 20_000): Promise<void> {
+    try {
+      logger.info(`Suche nach WEITER-Button...`);
+      
+      const nextButtonClicked = await page.evaluate(() => {
+        const buttons = document.querySelectorAll('button, div[role="button"]');
+        for (const btn of buttons) {
+          const text = btn.textContent?.trim().toLowerCase();
+          if (text === 'weiter' || text === 'next' || text === 'continue') {
+            (btn as HTMLElement).click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (nextButtonClicked) {
+        logger.info("✅ WEITER-Button gefunden und geklickt");
+        return;
+      }
+      
+      // Fallback
+      const ok = await page.waitForFunction(
+        () => {
+          const dialog = document.querySelector<HTMLElement>('div[role="dialog"]');
+          if (!dialog) return false;
+          const btn = [...dialog.querySelectorAll<HTMLElement>('button,div[role="button"]')]
+            .find(b => {
+              const text = (b.innerText || "").trim().toLowerCase();
+              return (text === 'weiter' || text === 'next' || text === 'continue') && 
+                     !b.hasAttribute("disabled");
+            });
+          if (btn) {
+            (btn as HTMLElement).click();
+            return true;
+          }
+          return false;
+        },
+        { timeout }
+      );
+
+      if (!ok) throw new Error(`WEITER-Button nicht gefunden`);
+      logger.info("✅ WEITER-Button über Fallback gefunden");
+      
+    } catch (error) {
+      logger.error(`Fehler beim Klicken des WEITER-Buttons: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Click Share button
+   */
+  private async clickShareButton(page: Page): Promise<void> {
+    logger.info("Warte auf aktivierten SHARE‑Button…");
+
+    try {
+      await page.waitForFunction(() => !document.querySelector('div[role="progressbar"]'), { timeout: 60_000 });
+    } catch {
+      logger.warn("Progress‑Spinner blieb sichtbar – fahre trotzdem fort");
+    }
+
+    const clicked = await page.waitForFunction(
+      () => {
+        const dialog = document.querySelector('div[role="dialog"]');
+        if (!dialog) return false;
+
+        const btn = [...dialog.querySelectorAll<HTMLElement>('button, div[role="button"]')].find(b => {
+          const txt = (b.textContent || "").trim();
+          const visible = b.offsetParent !== null;
+          const enabled = !b.hasAttribute("disabled") &&
+                          !(b as HTMLButtonElement).disabled &&
+                          b.getAttribute("aria-disabled") !== "true";
+          return visible && enabled && (txt === "Teilen" || txt === "Share");
+        });
+
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      },
+      { timeout: 60_000 }
+    );
+
+    if (!clicked) throw new Error("Share‑Button nicht klickbar");
+    logger.info("✅ Share‑Button geklickt, warte auf Dialog‑Verschwinden…");
+
+    await page.waitForFunction(
+      () => window.location.pathname === '/' ||
+            !!document.querySelector('[data-testid="upload-flow-success-toast"]'),
+      { timeout: 60_000 }
+    );
+  }
+
+  /**
+   * Find and fill caption
+   */
+  private async findAndFillCaption(page: Page, text: string): Promise<void> {
+    logger.info(`Versuche Caption einzugeben: "${text.slice(0, 100)}…"`);
+    
+    const sel = 'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]';
+    await page.waitForSelector(sel, { timeout: 10_000, visible: true });
+    const handle = await page.$(sel);
+    if (!handle) throw new Error("Caption‑Feld nicht gefunden");
+
+    await handle.click({ clickCount: 1 });
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.keyboard.press("Backspace");
+    await page.type(sel, text, { delay: 25 });
+    await this.delay(500);
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await this.delay(300);
+
+    const current = await page.evaluate(s => document.querySelector<HTMLElement>(s)?.innerText || "", sel);
+    logger.info(`Caption‑Länge nach Eingabe: ${current.length}`);
   }
 
   /**
