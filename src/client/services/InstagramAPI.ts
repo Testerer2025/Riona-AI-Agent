@@ -518,7 +518,7 @@ export class InstagramAPI {
   }
 
   /**
-   * Extract post caption
+   * Extract post caption - FIXED VERSION
    */
   private async extractPostCaption(postSelector: string, index: number): Promise<string> {
     try {
@@ -531,41 +531,44 @@ export class InstagramAPI {
       let caption = "";
       
       for (const captionSel of captionSelectors) {
-        const captionElements = await this.page!.$(captionSel);
-        
-        if (captionElements && captionElements.length > 0) {
-          for (const element of captionElements) {
-            if (!element) continue;
+        try {
+          // Get text content directly without element handles
+          const texts = await this.page!.evaluate((selector) => {
+            const elements = document.querySelectorAll(selector);
+            const results: string[] = [];
             
-            try {
-              const text = await element.evaluate((el: HTMLElement) => {
-                if (!el || !el.innerText) return '';
-                
-                const innerText = el.innerText.trim();
+            elements.forEach(el => {
+              if (el && el.textContent) {
+                const innerText = el.textContent.trim();
                 
                 // Filter UI elements
-                if (innerText.includes('Für dich vorgeschlagen') ||
-                    innerText.includes('Gefällt') ||
-                    innerText.includes('Kommentare') ||
-                    innerText.includes('Teilen') ||
-                    innerText === '•' ||
-                    innerText.match(/^\d+\s+(Std|Tag|Tage|h|m)/) ||
-                    innerText.length < 15) {
-                  return '';
+                if (!innerText.includes('Für dich vorgeschlagen') &&
+                    !innerText.includes('Gefällt') &&
+                    !innerText.includes('Kommentare') &&
+                    !innerText.includes('Teilen') &&
+                    innerText !== '•' &&
+                    !innerText.match(/^\d+\s+(Std|Tag|Tage|h|m)/) &&
+                    innerText.length >= 15) {
+                  results.push(innerText);
                 }
-                
-                return innerText;
-              });
-              
-              if (text && text.length > 15 && text.length > caption.length) {
-                caption = text;
               }
-            } catch (evalError) {
-              continue;
+            });
+            
+            return results;
+          }, captionSel);
+          
+          // Find the longest meaningful text
+          for (const text of texts) {
+            if (text && text.length > caption.length) {
+              caption = text;
             }
           }
           
           if (caption && caption.length > 15) break;
+          
+        } catch (selectorError: any) {
+          logger.warn(`Selector error for ${captionSel}:`, selectorError?.message);
+          continue;
         }
       }
       
