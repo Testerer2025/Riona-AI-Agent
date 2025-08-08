@@ -400,7 +400,7 @@ export class InstagramBot {
       }
       
       if (this.proxyServer) {
-        await this.proxyServer.close();
+        await this.proxyServer.close(true); // Force close
         this.proxyServer = null;
       }
       
