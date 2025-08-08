@@ -3,6 +3,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AdblockerPlugin from "puppeteer-extra-plugin-adblocker";
 import { Browser, Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer";
 import { Server } from "proxy-chain";
+import path from "path";
 import logger from "../config/logger";
 import { IGpassword, IGusername } from "../secret";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
@@ -396,7 +397,7 @@ export class InstagramBot {
   /**
    * Check for basic duplicates
    */
-  private async checkBasicDuplicates(content: string, imagePath: string): Promise<{isValid: boolean, reason?: string}> {
+  private async checkBasicDuplicates(content: string, _imagePath: string): Promise<{isValid: boolean, reason?: string}> {
     const isValidContent = !(await this.historyService.isDuplicate(
       require('crypto').createHash('md5').update(content).digest('hex')
     ));
