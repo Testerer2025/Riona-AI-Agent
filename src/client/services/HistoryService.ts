@@ -242,16 +242,16 @@ export class HistoryService {
     
     // Generate guidelines
     const avoidKeywords = Array.from(wordFrequency.entries())
-      .filter(([word, count]) => count >= this.KEYWORD_THRESHOLD)
+      .filter(([, count]) => count >= this.KEYWORD_THRESHOLD)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 15)
-      .map(([word]) => word);
+      .map(([wordKey]) => wordKey);
     
     const avoidEmojis = Array.from(emojiFrequency.entries())
-      .filter(([emoji, count]) => count >= 3)
+      .filter(([, count]) => count >= 3)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([emoji]) => emoji);
+      .map(([emojiKey]) => emojiKey);
     
     // Recommend underused topics
     const allTopics = ['business', 'team', 'tech', 'marketing', 'analytics', 'social-media'];

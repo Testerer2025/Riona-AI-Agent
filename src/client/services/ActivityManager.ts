@@ -142,7 +142,7 @@ export class ActivityManager {
   /**
    * Execute activity immediately
    */
-  private async executeImmediate(type: ActivityType, data?: any): Promise<boolean> {
+  private async executeImmediate(type: ActivityType, _data?: any): Promise<boolean> {
     if (this.isProcessing && type !== ActivityType.POSTING) {
       logger.warn(`🚫 Cannot execute ${type} - system processing`);
       return false;
@@ -160,6 +160,7 @@ export class ActivityManager {
       
       // Here we would call the actual service methods
       // This is where we'll integrate with ContentService, etc.
+      // For now, we simulate the activity
       
       await this.simulateActivity(type);
       
