@@ -471,58 +471,51 @@ export class InstagramAPI {
    * Extract post author
    */
   private async extractPostAuthor(postSelector: string): Promise<string> {
-  // 1. Header-HTML und Author gemeinsam aus dem Browser-Kontext zurückgeben:
-  const result = await this.page!.evaluate((selector: string) => {
-    const post = document.querySelector(selector);
-    if (!post) return JSON.stringify({ author: 'unknown', headerHTML: '[kein post gefunden]' });
-
-    const header = post.querySelector('header');
-    let headerHTML = header ? header.innerHTML : '[kein header gefunden]';
-
-    // Versuch: Profil-Link im Header
-    const headerLink = post.querySelector('header a[href^="/"]');
-    if (headerLink) {
-      const url = headerLink.getAttribute('href') || '';
-      const match = url.match(/^\/([^/]+)\//);
-      if (match && match[1]) {
-        return JSON.stringify({ author: match[1], headerHTML });
-      }
-    }
-
-    // Fallback: alle a-Tags im Header
-    if (header) {
-      const allLinks = header.querySelectorAll('a[href^="/"]');
-      for (let link of allLinks) {
-        const url = link.getAttribute('href') || '';
-        const match = url.match(/^\/([^/]+)\//);
-        if (match && match[1]) {
-          return JSON.stringify({ author: match[1], headerHTML });
+    return await this.page!.evaluate((selector: string) => {
+      const post = document.querySelector(selector);
+      if (!post) return 'unknown';
+      
+      const headerSelectors = [
+        'header a[role="link"]',
+        'article header a',
+        'header div a',
+        'h2 a'
+      ];
+      
+      for (const headerSel of headerSelectors) {
+        const headerLinks = post.querySelectorAll(headerSel);
+        
+        for (const link of headerLinks) {
+          const href = link.getAttribute('href');
+          const text = link.textContent?.trim() || '';
+          
+          if (href) {
+            const match = href.match(/^\/([^\/\?]+)(?:\/|\?|$)/);
+            if (match && match[1]) {
+              const username = match[1];
+              
+              if (username && 
+                  username.length > 0 && 
+                  username.length <= 30 &&
+                  username !== 'p' && 
+                  username !== 'reel' && 
+                  username !== 'reels' &&
+                  username !== 'stories' &&
+                  username !== 'explore' &&
+                  username !== 'accounts' &&
+                  !username.includes('audio') &&
+                  username.match(/^[a-zA-Z0-9._]+$/)) {
+                
+                return username;
+              }
+            }
+          }
         }
       }
-    }
-
-    // Nix gefunden
-    return JSON.stringify({ author: 'unknown', headerHTML });
-  }, postSelector);
-
-  // 2. Ergebnis im Node auswerten:
-  try {
-    const { author, headerHTML } = JSON.parse(result);
-    if (author === 'unknown') {
-      logger.warn(`[extractPostAuthor] Kein Author gefunden! Header-HTML: ${headerHTML}`);
-    } else {
-      logger.info(`[extractPostAuthor] Author erkannt: "${author}"`);
-    }
-    // (Optional: Du kannst headerHTML noch an eine Datei anhängen oder so)
-    return author;
-  } catch (e) {
-    logger.error(`[extractPostAuthor] Fehler beim Parsen:`, e, 'RAW:', result);
-    return 'unknown';
+      
+      return 'unknown';
+    }, postSelector);
   }
-}
-
-
-
 
   /**
    * Extract post caption - FIXED VERSION

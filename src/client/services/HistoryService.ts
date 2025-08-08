@@ -214,11 +214,11 @@ export class HistoryService {
       const content = post.content.toLowerCase();
       
       // Extract and count words (excluding common words)
-      const words = (content.match(/\b[a-zäöüß]+\b/g) || []) as string[];
-        const meaningfulWords = words.filter((word: string) => 
+      const words = content.match(/\b[a-zäöüß]+\b/g) || [];
+      const meaningfulWords = words.filter(word => 
         word.length > 3 && 
         !this.isCommonWord(word)
-        );
+      );
       
       for (const word of meaningfulWords) {
         wordFrequency.set(word, (wordFrequency.get(word) || 0) + 1);
