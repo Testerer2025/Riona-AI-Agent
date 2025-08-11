@@ -367,7 +367,7 @@ export class InstagramBot {
   }
 
   /**
-   * Generate unique post based on history analysis
+   * Generate unique post based on history analysis - ENHANCED with AI images
    */
   private async generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
     try {
@@ -379,7 +379,9 @@ export class InstagramBot {
         preferredTopics: historyGuidelines.recommendedTopics
       });
       
-      const imagePath = await this.imageManager.getImageForCategory(content.imageCategory);
+      // ENHANCED: Generate AI image based on actual content
+      logger.info("🤖 Generating AI image based on post content...");
+      const imagePath = await this.imageManager.getImageForContent(content.text);
       
       return { content: content.text, imagePath };
       
@@ -388,7 +390,15 @@ export class InstagramBot {
       
       // Fallback
       const fallbackContent = await this.contentService.generatePost();
-      const fallbackImagePath = await this.imageManager.getImageForCategory('default');
+      
+      // Try AI image generation for fallback too
+      let fallbackImagePath: string;
+      try {
+        fallbackImagePath = await this.imageManager.getImageForContent(fallbackContent.text);
+      } catch (imageError) {
+        logger.warn("⚠️ AI image generation failed, using category fallback");
+        fallbackImagePath = await this.imageManager.getImageForCategory('default');
+      }
       
       return { content: fallbackContent.text, imagePath: fallbackImagePath };
     }
