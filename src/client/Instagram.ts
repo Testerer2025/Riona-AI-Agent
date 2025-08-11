@@ -381,33 +381,38 @@ export class InstagramBot {
       // Use the new HistoryService and ContentService
       const historyGuidelines = await this.historyService.analyzeRecentPosts();
       
-      const content = await this.contentService.generatePost({
+      const contentObject = await this.contentService.generatePost({
         avoidKeywords: historyGuidelines.avoidKeywords,
         preferredTopics: historyGuidelines.recommendedTopics
       });
       
+      // FIXED: Extract text from content object
+      const contentText = contentObject.text; // Extract string from object
+      logger.info(`🔍 DEBUG - Content type: ${typeof contentText}, value: "${contentText.substring(0, 100)}..."`);
+      
       // ENHANCED: Generate AI image based on actual content
       logger.info("🤖 Generating AI image based on post content...");
-      const imagePath = await this.imageManager.getImageForContent(content.text);
+      const imagePath = await this.imageManager.getImageForContent(contentText); // Use string, not object
       
-      return { content: content.text, imagePath };
+      return { content: contentText, imagePath }; // Return string, not object
       
     } catch (error) {
       logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
       
       // Fallback
       const fallbackContent = await this.contentService.generatePost();
+      const fallbackText = fallbackContent.text; // Extract string from fallback too
       
       // Try AI image generation for fallback too
       let fallbackImagePath: string;
       try {
-        fallbackImagePath = await this.imageManager.getImageForContent(fallbackContent.text);
+        fallbackImagePath = await this.imageManager.getImageForContent(fallbackText); // Use string
       } catch (imageError) {
         logger.warn("⚠️ AI image generation failed, using category fallback");
         fallbackImagePath = await this.imageManager.getImageForCategory('default');
       }
       
-      return { content: fallbackContent.text, imagePath: fallbackImagePath };
+      return { content: fallbackText, imagePath: fallbackImagePath }; // Return string
     }
   }
 

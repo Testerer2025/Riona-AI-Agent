@@ -50,6 +50,19 @@ export class OpenAIImageService {
    */
   public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
     try {
+      // SAFETY CHECK: Ensure content is actually a string
+      if (typeof content !== 'string') {
+        logger.error(`❌ Content is not a string! Type: ${typeof content}, Value: ${JSON.stringify(content)}`);
+        throw new Error(`Expected string, got ${typeof content}`);
+      }
+      
+      if (!content || content.trim().length === 0) {
+        logger.error("❌ Content is empty or undefined");
+        throw new Error("Content cannot be empty");
+      }
+      
+      logger.info(`🔍 DEBUG - Content validation passed. Length: ${content.length} chars`);
+      
       // Create direct prompt from post content - IMPROVED
       const prompt = this.createPromptFromPostContent(content, category);
       
@@ -75,24 +88,28 @@ export class OpenAIImageService {
       .replace(/[^\w\s\u00C0-\u017F]/g, ' ') // Remove emojis/special chars, keep umlauts
       .replace(/\s+/g, ' ') // Multiple spaces to single
       .trim()
-      .substring(0, 300); // INCREASED: 150 → 300 characters
+      .substring(0, 300); // Keep reasonable length
 
-    const basePrompt = `Generiere ein passendes professionelles Bild für diesen Instagram-Post: "${cleanContent}"`;
+    // NEW IMPROVED PROMPT STRUCTURE
+    const basePrompt = `Create a highly realistic, professional stock photo that visually represents the following social media tip or advice. Focus on the concept, not the literal words. Avoid showing any readable or legible text in the image. Use realistic lighting, natural colors, high detail, and a clean modern setting.
+
+Theme: ${cleanContent}
+
+Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography, 8k resolution.`;
     
-    // Add category-specific style
-    const categoryStyles = {
-      'business': 'Corporate office environment, business professionals',
-      'social-media': 'Modern digital marketing workspace, social media content',
-      'tech': 'Technology office, computers and innovation, modern startup',
-      'team': 'Business team collaboration, diverse professionals working together',
-      'marketing': 'Creative marketing environment, brainstorming and campaigns',
-      'analytics': 'Business analytics dashboard, data visualization, charts',
-      'default': 'Professional business environment'
+    // Add category-specific context (optional enhancement)
+    const categoryContext = {
+      'business': ' Business office environment.',
+      'social-media': ' Digital marketing workspace.',
+      'tech': ' Technology and innovation setting.',
+      'team': ' Team collaboration environment.',
+      'marketing': ' Creative marketing atmosphere.',
+      'analytics': ' Data analysis workspace.',
+      'default': ' Professional business setting.'
     };
 
-    const categoryStyle = categoryStyles[category as keyof typeof categoryStyles] || categoryStyles.default;
-    
-    const fullPrompt = `${basePrompt}. Style: ${categoryStyle}, professional photography, high quality, business appropriate.`;
+    const context = categoryContext[category as keyof typeof categoryContext] || categoryContext.default;
+    const fullPrompt = basePrompt + context;
     
     // DEBUG: Log the full prompt length
     logger.info(`📝 Full DALL-E prompt (${fullPrompt.length} chars): "${fullPrompt}"`);
