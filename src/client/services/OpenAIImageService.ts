@@ -75,7 +75,7 @@ export class OpenAIImageService {
       .replace(/[^\w\s\u00C0-\u017F]/g, ' ') // Remove emojis/special chars, keep umlauts
       .replace(/\s+/g, ' ') // Multiple spaces to single
       .trim()
-      .substring(0, 150); // Limit length for DALL-E
+      .substring(0, 300); // INCREASED: 150 → 300 characters
 
     const basePrompt = `Generiere ein passendes professionelles Bild für diesen Instagram-Post: "${cleanContent}"`;
     
@@ -92,7 +92,12 @@ export class OpenAIImageService {
 
     const categoryStyle = categoryStyles[category as keyof typeof categoryStyles] || categoryStyles.default;
     
-    return `${basePrompt}. Style: ${categoryStyle}, professional photography, high quality, business appropriate.`;
+    const fullPrompt = `${basePrompt}. Style: ${categoryStyle}, professional photography, high quality, business appropriate.`;
+    
+    // DEBUG: Log the full prompt length
+    logger.info(`📝 Full DALL-E prompt (${fullPrompt.length} chars): "${fullPrompt}"`);
+    
+    return fullPrompt;
   }
 
   /**

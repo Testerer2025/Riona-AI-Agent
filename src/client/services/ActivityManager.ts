@@ -158,20 +158,34 @@ export class ActivityManager {
     try {
       logger.info(`▶️ Executing ${type} activity`);
       
-      // Here we would call the actual service methods
-      // This is where we'll integrate with ContentService, etc.
-      // For now, we simulate the activity
+      // NOTE: This ActivityManager now only manages state and scheduling
+      // The actual work is done in the main loop of InstagramBot
+      // We just set the state - the unlock happens when the real work is done
       
-      await this.simulateActivity(type);
-      
-      logger.info(`✅ ${type} activity completed`);
+      // No simulation anymore - the real work determines the timing
+      logger.info(`🔄 ${type} activity started - waiting for completion...`);
       return true;
       
     } catch (error) {
       logger.error(`❌ ${type} activity failed:`, error);
+      this.setActivity(ActivityType.IDLE); // Only unlock on error
       return false;
-    } finally {
+    }
+  }
+
+  /**
+   * Mark activity as completed (called from outside)
+   */
+  public completeActivity(type: ActivityType, success: boolean = true): void {
+    if (this.currentActivity === type) {
+      if (success) {
+        logger.info(`✅ ${type} activity completed successfully`);
+      } else {
+        logger.warn(`⚠️ ${type} activity completed with errors`);
+      }
       this.setActivity(ActivityType.IDLE);
+    } else {
+      logger.warn(`⚠️ Tried to complete ${type} but current activity is ${this.currentActivity}`);
     }
   }
 

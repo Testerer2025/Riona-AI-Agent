@@ -285,10 +285,14 @@ export class InstagramBot {
       // Use original postJoke function (integrated)
       await this.postJoke(this.page!);
       
-      logger.info("✅ Post created successfully");
+      // FIXED: Notify ActivityManager that posting is complete
+      this.activityManager.completeActivity(ActivityType.POSTING, true);
       
     } catch (error) {
       logger.error("❌ Posting activity failed:", error);
+      
+      // FIXED: Notify ActivityManager that posting failed
+      this.activityManager.completeActivity(ActivityType.POSTING, false);
       throw error;
     }
   }
