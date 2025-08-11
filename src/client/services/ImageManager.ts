@@ -1,7 +1,7 @@
 import path from "path";
 import fs from 'fs';
 import logger from "../../config/logger";
-import { StableDiffusionService } from "./StableDiffusionService";
+import { OpenAIImageService } from "./OpenAIImageService";
 
 export interface ImageCategory {
   name: string;
@@ -11,7 +11,7 @@ export interface ImageCategory {
 
 export class ImageManager {
   private readonly assetsDir = path.resolve("assets");
-  private readonly stableDiffusion: StableDiffusionService;
+  private readonly openaiImages: OpenAIImageService;
   
   // COMMENTED OUT: Original static categories - keep as fallback
   /*
@@ -54,7 +54,7 @@ export class ImageManager {
   private lastUsedImages: Map<string, string[]> = new Map();
 
   constructor() {
-    this.stableDiffusion = new StableDiffusionService();
+    this.openaiImages = new OpenAIImageService();
     this.initializeDirectories();
     this.loadImageCache();
     logger.info("🖼️ ImageManager initialized with AI generation");
@@ -80,7 +80,7 @@ export class ImageManager {
       // Generate new image with AI
       logger.info(`🤖 No local image found, generating with AI for category: ${category}`);
       const aiPrompt = this.createCategoryPrompt(category);
-      const aiImage = await this.stableDiffusion.generateImage({
+      const aiImage = await this.openaiImages.generateImage({
         prompt: aiPrompt,
         category: category,
         filename: `${category}_${Date.now()}`
@@ -107,7 +107,7 @@ export class ImageManager {
       const category = this.determineCategoryFromContent(content);
       
       // Generate AI image based on actual content
-      const aiImage = await this.stableDiffusion.generateImageFromContent(content, category);
+      const aiImage = await this.openaiImages.generateImageFromContent(content, category);
       
       logger.info(`✅ Generated content-specific AI image: ${path.basename(aiImage)}`);
       return aiImage;
@@ -287,25 +287,4 @@ export class ImageManager {
     }
   }
 
-  /**
-   * Test AI image generation
-   */
-  public async testAIGeneration(): Promise<string> {
-    try {
-      logger.info("🧪 Testing AI image generation...");
-      
-      const testImage = await this.stableDiffusion.generateImage({
-        prompt: "professional business meeting",
-        category: "test",
-        filename: `test_${Date.now()}`
-      });
-      
-      logger.info(`✅ AI generation test successful: ${testImage}`);
-      return testImage;
-      
-    } catch (error) {
-      logger.error("❌ AI generation test failed:", error);
-      throw error;
-    }
-  }
 }
