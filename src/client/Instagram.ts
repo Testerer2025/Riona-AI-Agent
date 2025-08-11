@@ -374,58 +374,275 @@ export class InstagramBot {
   }
 
   /**
-   * Generate unique post based on history analysis - ENHANCED with AI images
+   * Generate unique post based on history analysis - RESTORED ORIGINAL INTELLIGENCE
    */
   private async generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
     try {
-      // Use the new HistoryService and ContentService
-      const historyGuidelines = await this.historyService.analyzeRecentPosts();
+      logger.info("🔍 Analysiere Post-Historie für intelligente Content-Generierung...");
       
-      const contentObject = await this.contentService.generatePost({
-        avoidKeywords: historyGuidelines.avoidKeywords,
-        preferredTopics: historyGuidelines.recommendedTopics
-      });
+      // 1. Lade die letzten Posts für umfassende Analyse
+      const recentPosts = await Post.find()
+        .sort({ posted_at: -1 })
+        .limit(25)
+        .select('content image_name posted_at post_type');
       
-      // FIXED: Extract text from content object
-      const contentText = contentObject.text; // Extract string from object
-      logger.info(`🔍 DEBUG - Content type: ${typeof contentText}, value: "${contentText.substring(0, 100)}..."`);
+      logger.info(`📊 Gefunden: ${recentPosts.length} Posts für Analyse`);
       
-      // ENHANCED: Generate AI image based on actual content
-      logger.info("🤖 Generating AI image based on post content...");
-      const imagePath = await this.imageManager.getImageForContent(contentText); // Use string, not object
-      
-      return { content: contentText, imagePath }; // Return string, not object
-      
-    } catch (error) {
-      logger.error("❌ Historie-basierte Generierung fehlgeschlagen:", error);
-      
-      // Fallback
-      const fallbackContent = await this.contentService.generatePost();
-      const fallbackText = fallbackContent.text; // Extract string from fallback too
-      
-      // Try AI image generation for fallback too
-      let fallbackImagePath: string;
-      try {
-        fallbackImagePath = await this.imageManager.getImageForContent(fallbackText); // Use string
-      } catch (imageError) {
-        logger.warn("⚠️ AI image generation failed, using category fallback");
-        fallbackImagePath = await this.imageManager.getImageForCategory('default');
+      if (recentPosts.length < 3) {
+        logger.info("📝 Wenige Posts vorhanden - verwende vereinfachte Generierung");
+        return await this.generateSimplePost();
       }
       
-      return { content: fallbackText, imagePath: fallbackImagePath }; // Return string
+      // 2. ORIGINAL: AI-basierte Analyse mit detaillierten Prompts
+      const analysisPrompt = `
+      Du bist ein Content-Strategieexperte. Analysiere diese ${recentPosts.length} vorherigen Posts und erstelle Guidelines für einen neuen, einzigartigen Post.
+
+      VORHERIGE POSTS:
+      ${recentPosts.map((post, index) => {
+        const daysAgo = Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24));
+        return `Post ${index + 1} (vor ${daysAgo} Tagen): "${post.content}"`;
+      }).join('\n\n')}
+
+      AUFGABE: Analysiere diese Posts und identifiziere:
+      
+      1. **Überstrapazierte Themen** (was wurde zu oft behandelt?)
+      2. **Überstrapazierte Strukturen** (gleiche Aufbau-Muster?)
+      3. **Überstrapazierte Wörter/Phrasen** (welche Begriffe kommen zu häufig vor?)
+      4. **Überstrapazierte Emojis** (welche werden übermäßig verwendet?)
+      5. **Zeitliche Lücken** (welche Themen wurden lange nicht behandelt?)
+      6. **Stilistische Monotonie** (zu ähnlicher Tonfall?)
+
+      Gib mir dann KONKRETE EMPFEHLUNGEN für einen neuen Post, der:
+      - Ein UNTERREPRÄSENTIERTES Thema behandelt
+      - Eine ANDERE Struktur/Format hat
+      - FRISCHE Begriffe und Emojis verwendet
+      - Einen VARIIERENDEN Tonfall hat
+
+      Antworte in diesem Format:
+      {
+        "avoid_themes": ["Thema 1", "Thema 2"],
+        "avoid_structures": ["Struktur 1", "Struktur 2"],
+        "avoid_words": ["Wort 1", "Wort 2"],
+        "avoid_emojis": ["🚀", "💡"],
+        "recommended_theme": "Konkretes neues Thema",
+        "recommended_structure": "Neue Post-Struktur",
+        "recommended_tone": "Gewünschter Tonfall",
+        "fresh_elements": ["Element 1", "Element 2"]
+      }
+      `;
+
+      logger.info("🤖 Führe intelligente Post-Historie-Analyse durch...");
+      const analysisResponse = await runAgent(null as any, analysisPrompt);
+      
+      // 3. Parse Analysis
+      let guidelines;
+      try {
+        const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          guidelines = JSON.parse(jsonMatch[0]);
+          logger.info("✅ Post-Analyse erfolgreich geparst");
+          logger.info(`📋 Zu vermeiden: ${guidelines.avoid_themes?.join(', ')}`);
+          logger.info(`🎯 Empfohlenes Thema: ${guidelines.recommended_theme}`);
+        } else {
+          throw new Error("Keine Guidelines-JSON gefunden");
+        }
+      } catch (parseError) {
+        logger.warn("⚠️ Guidelines-Parsing fehlgeschlagen, verwende Basis-Empfehlungen");
+        guidelines = {
+          avoid_themes: ["Brainstorming", "Agenturleben"],
+          recommended_theme: "Kundengeschichten oder Branchentrends",
+          recommended_structure: "Frage-Antwort Format oder Storytelling",
+          recommended_tone: "Authentisch und persönlich"
+        };
+      }
+
+      // 4. ORIGINAL: Generiere gezielten Post basierend auf AI-Analyse
+      const targetedPrompt = `
+      Erstelle einen Instagram-Post für eine Social Media Agentur basierend auf dieser strategischen Analyse:
+
+      **VERMEIDE DIESE ÜBERSTRAPAZIERTEN ELEMENTE:**
+      - Themen: ${guidelines.avoid_themes?.join(', ') || 'Keine spezifischen'}
+      - Strukturen: ${guidelines.avoid_structures?.join(', ') || 'Keine spezifischen'}
+      - Wörter: ${guidelines.avoid_words?.join(', ') || 'Keine spezifischen'} 
+      - Emojis: ${guidelines.avoid_emojis?.join(', ') || 'Keine spezifischen'}
+
+      **NUTZE DIESE FRISCHEN ANSÄTZE:**
+      - Thema: ${guidelines.recommended_theme || 'Kundengeschichten oder Brancheninsights'}
+      - Struktur: ${guidelines.recommended_structure || 'Storytelling oder persönliche Anekdote'}
+      - Tonfall: ${guidelines.recommended_tone || 'Ehrlich und bodenständig'}
+      - Frische Elemente: ${guidelines.fresh_elements?.join(', ') || 'Neue Perspektiven'}
+
+      **ANFORDERUNGEN:**
+      - 300-450 Zeichen für Instagram
+      - Professionell aber authentisch
+      - Deutsch
+      - Echter Mehrwert für die Community
+      - Komplett anders als die analysierten Posts
+      - Call-to-Action in Form einer Frage oder Diskussionsanstoß
+
+      **BEISPIEL-THEMEN (falls du Inspiration brauchst):**
+      - Wie sich die Agentur-Landschaft verändert
+      - Lustige Kundenanfragen und was wir daraus lernen
+      - Warum manche Kampagnen scheitern (ehrlich)
+      - Behind-the-scenes von Projekt-Challenges
+      - Wie AI unser Daily Business verändert
+      - Was Kunden wirklich wollen vs. was sie sagen
+      - Trends die wir in verschiedenen Branchen sehen
+      - Erfolgsgeschichten unserer Kunden (anonymisiert)
+
+      Antworte nur mit dem fertigen Instagram-Post Text, keine Erklärungen.
+      `;
+
+      logger.info("🎨 Generiere gezielten Post basierend auf intelligenter AI-Analyse...");
+      const targetedPostResponse = await runAgent(null as any, targetedPrompt);
+      const postContent = this.parseAIResponse(targetedPostResponse);
+
+      // 5. Generate AI image based on actual content
+      logger.info("🤖 Generating AI image based on analyzed post content...");
+      const imagePath = await this.imageManager.getImageForContent(postContent);
+
+      // 6. Final Check - exakte Duplikate
+      const contentHash = require('crypto').createHash('md5').update(postContent).digest('hex');
+      const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+      
+      if (exactDuplicate) {
+        logger.warn("❌ Trotz intelligenter Analyse wurde exakter Duplikat generiert - verwende Fallback");
+        return await this.generateSimplePost();
+      }
+
+      logger.info("✅ Intelligenter, auf AI-Analyse basierter Post generiert");
+      logger.info(`📝 Neuer Post (${postContent.length} Zeichen): "${postContent.substring(0, 100)}..."`);
+      
+      return { content: postContent, imagePath };
+
+    } catch (error) {
+      logger.error("❌ Intelligente Post-Generierung fehlgeschlagen:", error);
+      return await this.generateSimplePost();
     }
+  }
+
+  /**
+   * Generate simple post as fallback
+   */
+  private async generateSimplePost(): Promise<{content: string, imagePath: string}> {
+    logger.info("🔄 Fallback zu einfacher Post-Generierung...");
+    
+    const content = await this.contentService.generatePost();
+    const imagePath = await this.imageManager.getImageForContent(content.text);
+    
+    return { content: content.text, imagePath };
+  }
+
+  /**
+   * Parse AI response - RESTORED ORIGINAL METHOD
+   */
+  private parseAIResponse(response: any): string {
+    try {
+      if (Array.isArray(response)) {
+        if (response[0]?.instagram_post) return response[0].instagram_post;
+        if (response[0]?.friday_post) return response[0].friday_post;        
+        if (response[0]?.motivational_post) return response[0].motivational_post; 
+        if (response[0]?.agency_post) return response[0].agency_post;        
+        if (response[0]?.tip_post) return response[0].tip_post;              
+        if (response[0]?.witz) return response[0].witz;
+        if (response[0]?.joke) return response[0].joke;
+        if (response[0]?.content) return response[0].content;
+        if (response[0]?.post) return response[0].post;
+        if (typeof response[0] === "string") return response[0];
+      }
+      
+      if (typeof response === "object" && response !== null) {
+        if (response.instagram_post) return String(response.instagram_post);
+        if (response.friday_post) return String(response.friday_post);        
+        if (response.motivational_post) return String(response.motivational_post); 
+        if (response.agency_post) return String(response.agency_post);        
+        if (response.tip_post) return String(response.tip_post);              
+        if (response.witz) return String(response.witz);
+        if (response.Witz) return String(response.Witz);
+        if (response.joke) return String(response.joke);
+        if (response.Joke) return String(response.Joke);
+        if (response.content) return String(response.content);
+        if (response.post) return String(response.post);
+      }
+      
+      if (typeof response === "string") {
+        try {
+          const parsed = JSON.parse(response);
+          if (Array.isArray(parsed) && parsed[0]?.instagram_post) {
+            return parsed[0].instagram_post;
+          }
+          if (Array.isArray(parsed) && parsed[0]?.friday_post) {          
+            return parsed[0].friday_post;
+          }
+          if (Array.isArray(parsed) && parsed[0]?.witz) {
+            return parsed[0].witz;
+          }
+          if (parsed?.instagram_post) return parsed.instagram_post;
+          if (parsed?.friday_post) return parsed.friday_post;            
+          if (parsed?.witz) return parsed.witz;
+          return response;
+        } catch {
+          return response;
+        }
+      }
+      
+      // Fallback
+      console.log("Unerwartetes Datenformat:", JSON.stringify(response));
+      const responseObj = Array.isArray(response) ? response[0] : response;
+      if (responseObj && typeof responseObj === 'object') {
+        const firstValue = Object.values(responseObj)[0];
+        if (typeof firstValue === 'string') {
+          return firstValue;
+        }
+      }
+      
+      return this.getBackupPost();
+      
+    } catch (error) {
+      console.error("Parse Error:", error);
+      return this.getBackupPost();
+    }
+  }
+
+  /**
+   * Get backup post - RESTORED ORIGINAL
+   */
+  private getBackupPost(): string {
+    const backupPosts = [
+      `🎯 Authentizität schlägt Perfektion. Jeden Tag.
+
+  Was ist euer authentischster Marketing-Moment gewesen?
+
+  #authentizität #realmarketing #storytelling #community`,
+
+      `⚡ Plot Twist: Die besten Kampagnen entstehen oft aus "gescheiterten" Ideen.
+
+  Welche eurer verworfenen Ideen hätte vielleicht doch funktioniert?
+
+  #kreativität #ideenfindung #kampagnenentwicklung #innovation`,
+
+      `🚀 Kleine Teams, große Wirkung: Manchmal ist weniger wirklich mehr.
+
+  Was ist euer bestes Beispiel für effiziente Teamarbeit?
+
+  #teamwork #effizienz #kleinesteams #grossewirkung`
+    ];
+    
+    return backupPosts[Math.floor(Math.random() * backupPosts.length)];
   }
 
   /**
    * Check for basic duplicates
    */
   private async checkBasicDuplicates(content: string, _imagePath: string): Promise<{isValid: boolean, reason?: string}> {
-    const isValidContent = !(await this.historyService.isDuplicate(
-      require('crypto').createHash('md5').update(content).digest('hex')
-    ));
+    const contentHash = require('crypto').createHash('md5').update(content).digest('hex');
     
-    if (!isValidContent) {
-      return { isValid: false, reason: 'exact_content_duplicate' };
+    // ENHANCED: Check both exact duplicates AND similarity
+    const isDuplicate = await this.historyService.isDuplicate(contentHash, content);
+    
+    if (isDuplicate) {
+      return { isValid: false, reason: 'duplicate_or_similar_content' };
     }
     
     return { isValid: true };
