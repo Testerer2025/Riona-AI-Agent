@@ -185,7 +185,7 @@ export class StableDiffusionService {
   /**
    * Create prompt from extracted keywords
    */
-  private createPromptFromKeywords(keywords: string[], category: string): string {
+  private createPromptFromKeywords(keywords: string[], _category: string): string {
     const scenes = {
       'team': 'diverse business team in modern office',
       'meeting': 'professional business meeting',
