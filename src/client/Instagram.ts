@@ -15,6 +15,10 @@ import { ImageManager } from "./services/ImageManager";
 import { HistoryService } from "./services/HistoryService";
 import { InstagramAPI } from "./services/InstagramAPI";
 
+// FEHLENDE IMPORTS - basierend auf anderen Dateien im Projekt
+import { Post } from "../models"; // MongoDB Model (eine Ebene hoch zu src/, dann models/)
+import { runAgent } from "../Agent"; // AI Agent function (eine Ebene hoch zu src/, dann Agent.ts)
+
 // Configure Puppeteer plugins
 puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({
@@ -398,7 +402,7 @@ export class InstagramBot {
       Du bist ein Content-Strategieexperte. Analysiere diese ${recentPosts.length} vorherigen Posts und erstelle Guidelines für einen neuen, einzigartigen Post.
 
       VORHERIGE POSTS:
-      ${recentPosts.map((post, index) => {
+      ${recentPosts.map((post: any, index: number) => {
         const daysAgo = Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24));
         return `Post ${index + 1} (vor ${daysAgo} Tagen): "${post.content}"`;
       }).join('\n\n')}
@@ -435,7 +439,7 @@ export class InstagramBot {
       const analysisResponse = await runAgent(null as any, analysisPrompt);
       
       // 3. Parse Analysis
-      let guidelines;
+      let guidelines: any;
       try {
         const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -638,8 +642,8 @@ export class InstagramBot {
   private async checkBasicDuplicates(content: string, _imagePath: string): Promise<{isValid: boolean, reason?: string}> {
     const contentHash = require('crypto').createHash('md5').update(content).digest('hex');
     
-    // ENHANCED: Check both exact duplicates AND similarity
-    const isDuplicate = await this.historyService.isDuplicate(contentHash, content);
+    // KORRIGIERT: nur einen Parameter an isDuplicate übergeben
+    const isDuplicate = await this.historyService.isDuplicate(contentHash);
     
     if (isDuplicate) {
       return { isValid: false, reason: 'duplicate_or_similar_content' };
