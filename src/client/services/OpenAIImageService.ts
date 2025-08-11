@@ -205,7 +205,7 @@ export class OpenAIImageService {
   /**
    * Create prompt from extracted keywords
    */
-  private createPromptFromKeywords(keywords: string[], category: string): string {
+  private createPromptFromKeywords(keywords: string[], _category: string): string {
     const scenes = {
       'team': 'diverse business team working together in modern office',
       'meeting': 'professional business meeting in conference room',
