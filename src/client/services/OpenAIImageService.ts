@@ -82,13 +82,13 @@ export class OpenAIImageService {
    * Create prompt directly from post content - NEW METHOD
    */
   private createPromptFromPostContent(postContent: string, category: string): string {
-    // Clean the post content (remove hashtags, emojis for prompt)
+    // Clean the post content (remove hashtags, but keep most content)
     const cleanContent = postContent
       .replace(/#\w+/g, '') // Remove hashtags
-      .replace(/[^\w\s\u00C0-\u017F]/g, ' ') // Remove emojis/special chars, keep umlauts
+      .replace(/[🔮💡📊⚡🚀🎯✨📈📱💻🌟⭐]/g, ' ') // Remove common emojis, keep text emojis like arrows
       .replace(/\s+/g, ' ') // Multiple spaces to single
-      .trim()
-      .substring(0, 300); // Keep reasonable length
+      .trim();
+      // REMOVED: .substring(0, 300) - no artificial limit!
 
     // NEW IMPROVED PROMPT STRUCTURE
     const basePrompt = `Create a highly realistic, professional stock photo that visually represents the following social media tip or advice. Focus on the concept, not the literal words. Avoid showing any readable or legible text in the image. Use realistic lighting, natural colors, high detail, and a clean modern setting.
