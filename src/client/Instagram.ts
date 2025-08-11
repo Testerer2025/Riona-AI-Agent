@@ -359,6 +359,9 @@ export class InstagramBot {
         // Save anyway - might have been successful
         await this.savePostToDatabase(jokeContent, finalImagePath);
       }
+
+      // FIXED: Success logging moved to end of actual posting process
+      logger.info("✅ Post created successfully");
       
     } catch (error) {
       logger.error("Gesamter Post-Prozess fehlgeschlagen:", error);

@@ -50,11 +50,8 @@ export class OpenAIImageService {
    */
   public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
     try {
-      // Extract keywords from content
-      const keywords = this.extractKeywordsFromContent(content);
-      
-      // Create prompt based on content and category
-      const prompt = this.createPromptFromKeywords(keywords, category);
+      // Create direct prompt from post content - IMPROVED
+      const prompt = this.createPromptFromPostContent(content, category);
       
       return await this.generateImage({
         prompt,
@@ -66,6 +63,36 @@ export class OpenAIImageService {
       logger.error("❌ Content-based DALL-E generation failed:", error);
       throw error;
     }
+  }
+
+  /**
+   * Create prompt directly from post content - NEW METHOD
+   */
+  private createPromptFromPostContent(postContent: string, category: string): string {
+    // Clean the post content (remove hashtags, emojis for prompt)
+    const cleanContent = postContent
+      .replace(/#\w+/g, '') // Remove hashtags
+      .replace(/[^\w\s\u00C0-\u017F]/g, ' ') // Remove emojis/special chars, keep umlauts
+      .replace(/\s+/g, ' ') // Multiple spaces to single
+      .trim()
+      .substring(0, 150); // Limit length for DALL-E
+
+    const basePrompt = `Generiere ein passendes professionelles Bild für diesen Instagram-Post: "${cleanContent}"`;
+    
+    // Add category-specific style
+    const categoryStyles = {
+      'business': 'Corporate office environment, business professionals',
+      'social-media': 'Modern digital marketing workspace, social media content',
+      'tech': 'Technology office, computers and innovation, modern startup',
+      'team': 'Business team collaboration, diverse professionals working together',
+      'marketing': 'Creative marketing environment, brainstorming and campaigns',
+      'analytics': 'Business analytics dashboard, data visualization, charts',
+      'default': 'Professional business environment'
+    };
+
+    const categoryStyle = categoryStyles[category as keyof typeof categoryStyles] || categoryStyles.default;
+    
+    return `${basePrompt}. Style: ${categoryStyle}, professional photography, high quality, business appropriate.`;
   }
 
   /**
