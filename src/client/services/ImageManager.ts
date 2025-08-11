@@ -1,6 +1,7 @@
 import path from "path";
 import fs from 'fs';
 import logger from "../../config/logger";
+import { StableDiffusionService } from "./StableDiffusionService";
 
 export interface ImageCategory {
   name: string;
@@ -10,6 +11,10 @@ export interface ImageCategory {
 
 export class ImageManager {
   private readonly assetsDir = path.resolve("assets");
+  private readonly stableDiffusion: StableDiffusionService;
+  
+  // COMMENTED OUT: Original static categories - keep as fallback
+  /*
   private readonly categories: ImageCategory[] = [
     {
       name: 'Business',
@@ -42,41 +47,95 @@ export class ImageManager {
       folder: 'analytics'
     }
   ];
+  */
 
   private readonly supportedFormats = ['.jpg', '.jpeg', '.png', '.webp'];
   private imageCache: Map<string, string[]> = new Map();
   private lastUsedImages: Map<string, string[]> = new Map();
 
   constructor() {
+    this.stableDiffusion = new StableDiffusionService();
     this.initializeDirectories();
     this.loadImageCache();
-    logger.info("🖼️ ImageManager initialized");
+    logger.info("🖼️ ImageManager initialized with AI generation");
   }
 
   /**
-   * Get image for specific category
+   * Get image for specific category - ENHANCED with AI generation
    */
   public async getImageForCategory(category: string): Promise<string> {
     try {
       logger.info(`🎨 Selecting image for category: ${category}`);
       
-      const imagePath = await this.selectBestImage(category);
-      
-      if (!imagePath || !fs.existsSync(imagePath)) {
-        logger.warn(`⚠️ Image not found for category ${category}, using fallback`);
-        return await this.createFallbackImage();
+      // COMMENTED OUT: Try local images first
+      /*
+      const localImage = await this.selectBestLocalImage(category);
+      if (localImage && fs.existsSync(localImage)) {
+        this.trackImageUsage(category, localImage);
+        logger.info(`✅ Selected local image: ${path.basename(localImage)} for ${category}`);
+        return localImage;
       }
+      */
       
-      // Track usage to avoid repetition
-      this.trackImageUsage(category, imagePath);
+      // Generate new image with AI
+      logger.info(`🤖 No local image found, generating with AI for category: ${category}`);
+      const aiPrompt = this.createCategoryPrompt(category);
+      const aiImage = await this.stableDiffusion.generateImage({
+        prompt: aiPrompt,
+        category: category,
+        filename: `${category}_${Date.now()}`
+      });
       
-      logger.info(`✅ Selected image: ${path.basename(imagePath)} for ${category}`);
-      return imagePath;
+      logger.info(`✅ Generated AI image: ${path.basename(aiImage)} for ${category}`);
+      return aiImage;
       
     } catch (error) {
-      logger.error("❌ Image selection failed:", error);
+      logger.error("❌ Image selection/generation failed:", error);
+      
+      // Fallback to creating a simple fallback image
       return await this.createFallbackImage();
     }
+  }
+
+  /**
+   * Get image for content - ENHANCED with AI
+   */
+  public async getImageForContent(content: string): Promise<string> {
+    try {
+      logger.info(`🎨 Generating image for content: "${content.substring(0, 50)}..."`);
+      
+      const category = this.determineCategoryFromContent(content);
+      
+      // Generate AI image based on actual content
+      const aiImage = await this.stableDiffusion.generateImageFromContent(content, category);
+      
+      logger.info(`✅ Generated content-specific AI image: ${path.basename(aiImage)}`);
+      return aiImage;
+      
+    } catch (error) {
+      logger.error("❌ Content-based image generation failed:", error);
+      
+      // Fallback to category-based generation
+      const category = this.determineCategoryFromContent(content);
+      return await this.getImageForCategory(category);
+    }
+  }
+
+  /**
+   * Create AI prompt for category
+   */
+  private createCategoryPrompt(category: string): string {
+    const categoryPrompts = {
+      'business': 'modern business office with professionals working, corporate environment',
+      'social-media': 'social media marketing workspace with screens showing analytics',
+      'tech': 'modern technology startup office with computers and innovation',
+      'marketing': 'creative marketing team brainstorming with colorful ideas',
+      'team': 'diverse business team collaborating in modern office space',
+      'analytics': 'business analytics dashboard with charts and data visualization',
+      'default': 'professional business environment with modern office setup'
+    };
+    
+    return categoryPrompts[category as keyof typeof categoryPrompts] || categoryPrompts.default;
   }
 
   /**
@@ -84,35 +143,65 @@ export class ImageManager {
    */
   public determineCategoryFromContent(content: string): string {
     const contentLower = content.toLowerCase();
-    let bestMatch = { category: 'default', score: 0 };
     
-    for (const category of this.categories) {
-      let score = 0;
-      const foundKeywords: string[] = [];
-      
-      for (const keyword of category.keywords) {
-        if (contentLower.includes(keyword.toLowerCase())) {
-          score++;
-          foundKeywords.push(keyword);
-        }
-      }
-      
-      if (score > bestMatch.score) {
-        bestMatch = { category: category.folder, score };
-        if (foundKeywords.length > 0) {
-          logger.info(`📍 Category "${category.name}" matched with keywords: ${foundKeywords.join(', ')}`);
-        }
+    const categories = {
+      'business': ['business', 'unternehmen', 'erfolg', 'strategie', 'meeting'],
+      'social-media': ['instagram', 'tiktok', 'social media', 'content', 'posting'],
+      'tech': ['tool', 'digital', 'tech', 'software', 'innovation', 'ki', 'ai'],
+      'team': ['team', 'zusammen', 'kollaboration', 'mitarbeiter'],
+      'marketing': ['marketing', 'kampagne', 'werbung', 'brand', 'marke'],
+      'analytics': ['analytics', 'daten', 'statistik', 'zahlen', 'performance']
+    };
+    
+    for (const [category, keywords] of Object.entries(categories)) {
+      if (keywords.some(keyword => contentLower.includes(keyword))) {
+        return category;
       }
     }
     
-    if (bestMatch.score === 0) {
-      logger.info("📍 No specific category matched, using default");
-      return 'default';
-    }
-    
-    logger.info(`✅ Best category match: ${bestMatch.category} (score: ${bestMatch.score})`);
-    return bestMatch.category;
+    return 'default';
   }
+
+  // COMMENTED OUT: Original local image selection methods - keep as reference
+  /*
+  private async selectBestLocalImage(category: string): Promise<string> {
+    let images = this.imageCache.get(category) || [];
+    
+    if (images.length === 0) {
+      logger.warn(`⚠️ No images in category ${category}, trying default`);
+      images = this.imageCache.get('default') || [];
+    }
+    
+    if (images.length === 0) {
+      logger.warn("⚠️ No images available in any category");
+      return '';
+    }
+
+    const recentlyUsed = this.lastUsedImages.get(category) || [];
+    const availableImages = images.filter(img => !recentlyUsed.includes(img));
+    
+    const finalImages = availableImages.length > 0 ? availableImages : images;
+    const randomIndex = Math.floor(Math.random() * finalImages.length);
+    return finalImages[randomIndex];
+  }
+
+  private trackImageUsage(category: string, imagePath: string): void {
+    const maxRecentImages = 5;
+    
+    if (!this.lastUsedImages.has(category)) {
+      this.lastUsedImages.set(category, []);
+    }
+    
+    const recent = this.lastUsedImages.get(category)!;
+    recent.unshift(imagePath);
+    
+    if (recent.length > maxRecentImages) {
+      recent.splice(maxRecentImages);
+    }
+    
+    this.lastUsedImages.set(category, recent);
+  }
+  */
 
   /**
    * Get available images count per category
@@ -120,25 +209,15 @@ export class ImageManager {
   public getImageStats(): Record<string, number> {
     const stats: Record<string, number> = {};
     
-    for (const category of this.categories) {
-      const images = this.imageCache.get(category.folder) || [];
-      stats[category.folder] = images.length;
+    // Count AI generated images
+    const categories = ['business', 'social-media', 'tech', 'marketing', 'team', 'analytics', 'default'];
+    
+    for (const category of categories) {
+      const images = this.imageCache.get(category) || [];
+      stats[category] = images.length;
     }
     
-    const defaultImages = this.imageCache.get('default') || [];
-    stats['default'] = defaultImages.length;
-    
     return stats;
-  }
-
-  /**
-   * Refresh image cache
-   */
-  public refreshImageCache(): void {
-    logger.info("🔄 Refreshing image cache...");
-    this.imageCache.clear();
-    this.loadImageCache();
-    logger.info("✅ Image cache refreshed");
   }
 
   /**
@@ -150,8 +229,8 @@ export class ImageManager {
       logger.info(`📁 Created assets directory: ${this.assetsDir}`);
     }
 
-    // Create category folders
-    const allFolders = [...this.categories.map(cat => cat.folder), 'default'];
+    // Create basic category folders
+    const allFolders = ['business', 'social-media', 'tech', 'marketing', 'team', 'analytics', 'default'];
     
     for (const folder of allFolders) {
       const folderPath = path.join(this.assetsDir, folder);
@@ -166,7 +245,7 @@ export class ImageManager {
    * Load all images into cache
    */
   private loadImageCache(): void {
-    const allFolders = [...this.categories.map(cat => cat.folder), 'default'];
+    const allFolders = ['business', 'social-media', 'tech', 'marketing', 'team', 'analytics', 'default'];
     
     for (const folder of allFolders) {
       const folderPath = path.join(this.assetsDir, folder);
@@ -183,56 +262,7 @@ export class ImageManager {
   }
 
   /**
-   * Select best image avoiding recent duplicates
-   */
-  private async selectBestImage(category: string): Promise<string> {
-    let images = this.imageCache.get(category) || [];
-    
-    // If category has no images, try default
-    if (images.length === 0) {
-      logger.warn(`⚠️ No images in category ${category}, trying default`);
-      images = this.imageCache.get('default') || [];
-    }
-    
-    if (images.length === 0) {
-      logger.warn("⚠️ No images available in any category");
-      return '';
-    }
-
-    // Filter out recently used images if we have enough
-    const recentlyUsed = this.lastUsedImages.get(category) || [];
-    const availableImages = images.filter(img => !recentlyUsed.includes(img));
-    
-    const finalImages = availableImages.length > 0 ? availableImages : images;
-    
-    // Select random image
-    const randomIndex = Math.floor(Math.random() * finalImages.length);
-    return finalImages[randomIndex];
-  }
-
-  /**
-   * Track image usage to avoid immediate repetition
-   */
-  private trackImageUsage(category: string, imagePath: string): void {
-    const maxRecentImages = 5; // Remember last 5 used images per category
-    
-    if (!this.lastUsedImages.has(category)) {
-      this.lastUsedImages.set(category, []);
-    }
-    
-    const recent = this.lastUsedImages.get(category)!;
-    recent.unshift(imagePath);
-    
-    // Keep only the last N images
-    if (recent.length > maxRecentImages) {
-      recent.splice(maxRecentImages);
-    }
-    
-    this.lastUsedImages.set(category, recent);
-  }
-
-  /**
-   * Create fallback image if none available
+   * Create fallback image if generation fails
    */
   private async createFallbackImage(): Promise<string> {
     const fallbackPath = path.join(this.assetsDir, 'default', 'fallback.png');
@@ -258,24 +288,24 @@ export class ImageManager {
   }
 
   /**
-   * Validate image file
+   * Test AI image generation
    */
-  private isValidImageFile(filePath: string): boolean {
+  public async testAIGeneration(): Promise<string> {
     try {
-      if (!fs.existsSync(filePath)) {
-        return false;
-      }
-
-      const stats = fs.statSync(filePath);
-      if (stats.size === 0) {
-        return false;
-      }
-
-      const ext = path.extname(filePath).toLowerCase();
-      return this.supportedFormats.includes(ext);
-
+      logger.info("🧪 Testing AI image generation...");
+      
+      const testImage = await this.stableDiffusion.generateImage({
+        prompt: "professional business meeting",
+        category: "test",
+        filename: `test_${Date.now()}`
+      });
+      
+      logger.info(`✅ AI generation test successful: ${testImage}`);
+      return testImage;
+      
     } catch (error) {
-      return false;
+      logger.error("❌ AI generation test failed:", error);
+      throw error;
     }
   }
 }
