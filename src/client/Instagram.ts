@@ -7,6 +7,7 @@ import path from "path";
 import logger from "../config/logger";
 import { IGpassword, IGusername } from "../secret";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
+import { assertInstagramCreds, IGusername, IGpassword } from "./secret";
 
 // Import our new services
 import { ActivityManager, ActivityType } from "./services/ActivityManager";
@@ -24,6 +25,8 @@ puppeteer.use(StealthPlugin());
 puppeteer.use(AdblockerPlugin({
   interceptResolutionPriority: DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
 }));
+
+assertInstagramCreds();
 
 export class InstagramBot {
   private browser: Browser | null = null;
@@ -150,28 +153,28 @@ export class InstagramBot {
   private async authenticateUser(): Promise<void> {
     logger.info("🔐 Authenticating user...");
     
-    const cookiesExist = await Instagram_cookiesExist();
-    
-    if (cookiesExist) {
-      logger.info("🍪 Loading existing cookies...");
-      const cookies = await loadCookies(this.cookiesPath);
-      await this.page!.setCookie(...cookies);
-      
-      await this.page!.goto("https://www.instagram.com/", { waitUntil: 'networkidle2' });
-      
-      // Verify login
-      const isLoggedIn = await this.page!.$("a[href='/direct/inbox/']");
-      if (isLoggedIn) {
-        logger.info("✅ Authentication successful with cookies");
-        return;
-      } else {
-        logger.warn("⚠️ Cookies invalid, logging in with credentials...");
-      }
+    // in authenticateUser()
+  const cookiesExist = await Instagram_cookiesExist(this.cookiesPath);
+  if (cookiesExist) {
+    logger.info("🍪 Loading existing cookies.");
+    const cookies = await loadCookies(this.cookiesPath);
+    if (cookies && cookies.length > 0) {
+      await this.page!.setCookie(...cookies); // <-- WICHTIG: Spread
     }
-    
-    // Login with credentials
-    await this.loginWithCredentials();
-    logger.info("✅ Authentication successful");
+    await this.page!.goto("https://www.instagram.com/", { waitUntil: 'networkidle2' });
+
+    // Health-Check: eingeloggte UI?
+    const isLoggedIn = await this.page!.$("a[href='/direct/inbox/']");
+    if (isLoggedIn) {
+      logger.info("✅ Authentication successful with cookies");
+      return;
+    }
+    logger.warn("⚠️ Cookies invalid, logging in with credentials.");
+  }
+
+  // Fallback: Login via Credentials
+  await this.loginWithCredentials();
+  logger.info("✅ Authentication successful");
   }
 
   /**
@@ -179,6 +182,7 @@ export class InstagramBot {
    */
   private async loginWithCredentials(): Promise<void> {
     try {
+      // in loginWithCredentials()
       await this.page!.goto("https://www.instagram.com/accounts/login/");
       await this.page!.waitForSelector('input[name="username"]', { timeout: 10000 });
 
@@ -188,11 +192,12 @@ export class InstagramBot {
 
       await this.page!.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
 
-      // Save cookies
-      const cookies = await this.browser!.cookies();
+      // Cookies korrekt lesen und speichern
+      const cookies = await this.page!.cookies(); // <-- statt this.browser!.cookies()
       await saveCookies(this.cookiesPath, cookies);
-      
+
       logger.info("✅ Login successful, cookies saved");
+
       
     } catch (error) {
       logger.error("❌ Login failed:", error);
@@ -277,9 +282,47 @@ export class InstagramBot {
   }
 
   /**
+ * Prüft vor kritischen Aktionen, ob Session/Cookies gültig sind,
+ * und führt bei Bedarf einen Re-Login durch.
+ */
+private async ensureLoggedIn(): Promise<void> {
+  try {
+    // 1) Vorhandene Cookies laden & injizieren
+    const existing = await loadCookies(this.cookiesPath).catch(() => null);
+    if (existing && existing.length) {
+      await this.page!.setCookie(...existing); // WICHTIG: Spread
+    }
+
+    // 2) Grober Expiry-Check (sessionid)
+    const now = Math.floor(Date.now() / 1000);
+    const session = (existing || []).find((c: any) => c.name === "sessionid");
+    const expired = !session || (typeof session.expires === "number" && session.expires > 0 && session.expires < now);
+
+    if (expired) {
+      logger.warn("⚠️ Session abgelaufen/fehlend → Login mit Credentials.");
+      await this.loginWithCredentials(); // speichert frische Cookies
+      return;
+    }
+
+    // 3) UI-Health-Check (wirklich eingeloggt?)
+    await this.page!.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
+    const isLoggedIn = await this.page!.$("a[href='/direct/inbox/']");
+    if (!isLoggedIn) {
+      logger.warn("⚠️ UI-Check fehlgeschlagen → Login mit Credentials.");
+      await this.loginWithCredentials();
+    }
+  } catch (e) {
+    logger.warn("⚠️ ensureLoggedIn(): Fehler, versuche Re-Login.", e as any);
+    await this.loginWithCredentials();
+  }
+}
+
+
+  /**
    * Handle posting activity - REAL IMPLEMENTATION with original postJoke
    */
   private async handlePostingActivity(): Promise<void> {
+    await this.ensureLoggedIn();
     try {
       logger.info("📝 Executing posting activity...");
       
