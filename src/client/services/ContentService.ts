@@ -1,7 +1,9 @@
 import { runAgent } from "../../Agent";
 import logger from "../../config/logger";
 import crypto from 'crypto';
+import { ConfigManager, ThemeConfig } from './ConfigManager';
 
+// Keep PostType enum for backward compatibility
 export enum PostType {
   AGENCY_SHOWCASE = 'agency_showcase',
   TIPS_TRICKS = 'tips_tricks', 
@@ -12,7 +14,7 @@ export enum PostType {
 
 export interface GeneratedContent {
   text: string;
-  postType: PostType;
+  postType: string;  // Changed from PostType enum to string
   contentHash: string;
   imageCategory: string;
 }
@@ -26,24 +28,23 @@ export interface ContentConfig {
 }
 
 export class ContentService {
-  private readonly defaultConfig: ContentConfig = {
-    maxLength: 450,
-    includeHashtags: true,
-    includeCallToAction: true,
-    avoidKeywords: [],
-    preferredTopics: []
-  };
-
-  private postTypeWeights: Record<PostType, number> = {
-    [PostType.AGENCY_SHOWCASE]: 3,
-    [PostType.TIPS_TRICKS]: 3,
-    [PostType.MOTIVATIONAL]: 2,
-    [PostType.INDUSTRY_NEWS]: 1,
-    [PostType.BEHIND_SCENES]: 1
-  };
+  private configManager: ConfigManager;
+  private defaultConfig: ContentConfig;
 
   constructor() {
-    logger.info("📝 ContentService initialized");
+    this.configManager = new ConfigManager();
+    
+    // Initialize default config from ConfigManager
+    const defaults = this.configManager.getDefaults();
+    this.defaultConfig = {
+      maxLength: defaults.maxLength,
+      includeHashtags: defaults.includeHashtags,
+      includeCallToAction: true,
+      avoidKeywords: [],
+      preferredTopics: []
+    };
+    
+    logger.info("📝 ContentService initialized with ConfigManager");
   }
 
   /**
@@ -55,24 +56,61 @@ export class ContentService {
     try {
       logger.info("🎨 Generating new post content...");
       
-      const postType = this.selectPostType();
-      const content = await this.generateContentByType(postType, finalConfig);
+      // Select theme using ConfigManager
+      const theme = this.configManager.selectWeightedTheme();
+      
+      // Generate content based on selected theme
+      const content = await this.generateContentForTheme(theme, finalConfig);
       const contentHash = this.createContentHash(content);
-      const imageCategory = this.determineImageCategory(content);
+      const imageCategory = this.determineImageCategoryFromTheme(theme);
       
       const result: GeneratedContent = {
         text: content,
-        postType,
+        postType: theme.id,
         contentHash,
         imageCategory
       };
       
-      logger.info(`✅ Generated ${postType} post (${content.length} chars)`);
+      logger.info(`✅ Generated ${theme.name} post (${content.length} chars)`);
       return result;
       
     } catch (error) {
       logger.error("❌ Content generation failed:", error);
       return this.getEmergencyContent();
+    }
+  }
+
+  /**
+   * Generate content for specific theme
+   */
+  private async generateContentForTheme(theme: ThemeConfig, config: ContentConfig): Promise<string> {
+    try {
+      // Build prompt from theme config
+      let prompt = theme.prompt;
+      
+      // Replace variables in prompt
+      prompt = prompt.replace(/{{maxLength}}/g, config.maxLength.toString());
+      prompt = prompt.replace(/{{dayOfWeek}}/g, this.getCurrentDayOfWeek());
+      
+      // Add avoid keywords if specified
+      if (config.avoidKeywords && config.avoidKeywords.length > 0) {
+        prompt += `\n\nVermeide diese Wörter: ${config.avoidKeywords.join(', ')}`;
+      }
+      
+      // Add preferred topics if specified
+      if (config.preferredTopics && config.preferredTopics.length > 0) {
+        prompt += `\n\nBevorzuge diese Themen: ${config.preferredTopics.join(', ')}`;
+      }
+      
+      logger.info(`🤖 Generating content with theme: ${theme.name}`);
+      
+      // Call AI agent
+      const result = await runAgent(null as any, prompt);
+      return this.parseAIResponse(result);
+      
+    } catch (error) {
+      logger.error(`❌ Failed to generate content for theme ${theme.id}:`, error);
+      throw error;
     }
   }
 
@@ -118,181 +156,6 @@ export class ContentService {
   }
 
   /**
-   * Select post type based on weights
-   */
-  private selectPostType(): PostType {
-    const weightedTypes: PostType[] = [];
-    
-    for (const [type, weight] of Object.entries(this.postTypeWeights)) {
-      for (let i = 0; i < weight; i++) {
-        weightedTypes.push(type as PostType);
-      }
-    }
-    
-    const randomIndex = Math.floor(Math.random() * weightedTypes.length);
-    return weightedTypes[randomIndex];
-  }
-
-  /**
-   * Generate content by specific type
-   */
-  private async generateContentByType(type: PostType, config: ContentConfig): Promise<string> {
-    const prompts = {
-      [PostType.AGENCY_SHOWCASE]: this.getAgencyShowcasePrompt(config),
-      [PostType.TIPS_TRICKS]: this.getTipsPrompt(config),
-      [PostType.MOTIVATIONAL]: this.getMotivationalPrompt(config),
-      [PostType.INDUSTRY_NEWS]: this.getIndustryNewsPrompt(config),
-      [PostType.BEHIND_SCENES]: this.getBehindScenesPrompt(config)
-    };
-
-    const prompt = prompts[type];
-    const result = await runAgent(null as any, prompt);
-    
-    return this.parseAIResponse(result);
-  }
-
-  /**
-   * Generate agency showcase prompt
-   */
-  private getAgencyShowcasePrompt(config: ContentConfig): string {
-    return `
-      Create an Instagram post for a social media marketing agency showcasing expertise.
-      
-      Style Options (choose one randomly):
-      - Client success story (anonymous)
-      - Behind-the-scenes agency process
-      - Industry insight from experience
-      - Problem-solution showcase
-      
-      Requirements:
-      - ${config.maxLength} characters max
-      - German language
-      - Professional but approachable
-      - Show expertise without bragging
-      - Include engaging question at end
-      - 3-4 relevant hashtags if needed
-      
-      Avoid these overused phrases: "Erfolgreiche Social Media Strategie", "Was denkt ihr?", "Schreibt uns!"
-      
-      Return only the post text.
-    `;
-  }
-
-  /**
-   * Generate tips prompt
-   */
-  private getTipsPrompt(config: ContentConfig): string {
-    return `
-      Create a practical social media marketing tip post.
-      
-      Tip Categories (choose one):
-      - Content creation tricks
-      - Engagement strategies  
-      - Analytics insights
-      - Platform-specific hacks
-      - Time-saving tools
-      
-      Requirements:
-      - ${config.maxLength} characters max
-      - German language
-      - Actionable and specific
-      - Include benefit/result
-      - Encourage implementation
-      - Professional tone
-      
-      Format: 💡 Tipp: [specific advice] → [expected result/benefit]
-      
-      Return only the post text.
-    `;
-  }
-
-  /**
-   * Generate motivational prompt
-   */
-  private getMotivationalPrompt(config: ContentConfig): string {
-    const dayOfWeek = new Date().toLocaleDateString('de-DE', { weekday: 'long' });
-    
-    return `
-      Create a motivational ${dayOfWeek} post for business owners and marketers.
-      
-      Themes (choose one):
-      - Entrepreneurial mindset
-      - Creative persistence  
-      - Team collaboration
-      - Innovation mindset
-      - Customer focus
-      
-      Requirements:
-      - ${config.maxLength} characters max
-      - German language
-      - Inspiring but not cheesy
-      - Business-relevant
-      - Include reflection question
-      - Relate to marketing/business challenges
-      
-      Avoid generic motivation - focus on business-specific inspiration.
-      
-      Return only the post text.
-    `;
-  }
-
-  /**
-   * Generate industry news prompt
-   */
-  private getIndustryNewsPrompt(config: ContentConfig): string {
-    return `
-      Create a post about a current digital marketing trend or development.
-      
-      Topic Areas (choose one):
-      - AI in marketing
-      - Platform updates (Instagram, TikTok, LinkedIn)
-      - Consumer behavior changes
-      - New marketing tools
-      - Privacy/regulation changes
-      
-      Requirements:
-      - ${config.maxLength} characters max
-      - German language
-      - Educational and informative
-      - Include practical implications
-      - Professional expert tone
-      - Ask for community opinions
-      
-      Format: 🔮 Trend Update: [trend] → [why it matters] → [what to do about it]
-      
-      Return only the post text.
-    `;
-  }
-
-  /**
-   * Generate behind-the-scenes prompt
-   */
-  private getBehindScenesPrompt(config: ContentConfig): string {
-    return `
-      Create an authentic behind-the-scenes post about agency life.
-      
-      Scenarios (choose one):
-      - Team brainstorming session insights
-      - Client meeting learnings
-      - Tool/process discoveries
-      - Daily agency challenges
-      - Creative process moments
-      
-      Requirements:
-      - ${config.maxLength} characters max
-      - German language
-      - Authentic and relatable
-      - Show human side of business
-      - Include lesson learned
-      - Invite community sharing
-      
-      Tone: Conversational, honest, professional but personal
-      
-      Return only the post text.
-    `;
-  }
-
-  /**
    * Parse AI response to extract clean text
    */
   private parseAIResponse(response: any): string {
@@ -334,9 +197,22 @@ export class ContentService {
   }
 
   /**
-   * Determine image category based on content
+   * Determine image category from theme
    */
-  private determineImageCategory(content: string): string {
+  private determineImageCategoryFromTheme(theme: ThemeConfig): string {
+    // Use first keyword from theme as category
+    if (theme.imageKeywords && theme.imageKeywords.length > 0) {
+      return theme.imageKeywords[0];
+    }
+    
+    // Fallback to theme ID
+    return theme.id.replace('_', '-');
+  }
+
+  /**
+   * Determine image category based on content (backward compatibility)
+   */
+  public determineImageCategory(content: string): string {
     const contentLower = content.toLowerCase();
     
     const categories = {
@@ -357,23 +233,23 @@ export class ContentService {
   }
 
   /**
+   * Get current day of week in German
+   */
+  private getCurrentDayOfWeek(): string {
+    const days = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+    return days[new Date().getDay()];
+  }
+
+  /**
    * Emergency content when generation fails
    */
   private getEmergencyContent(): GeneratedContent {
-    const emergencyPosts = [
-      "🚀 Innovation passiert nicht von selbst - sie entsteht durch mutiges Handeln und kontinuierliches Lernen.\n\nWas war euer innovativster Schritt dieses Jahr?\n\n#innovation #marketing #mindset",
-      
-      "💡 Die besten Ideen entstehen oft im Dialog. Deshalb schätzen wir den Austausch mit unserer Community so sehr.\n\nWelche Herausforderung beschäftigt euch gerade?\n\n#community #austausch #marketing",
-      
-      "📊 Daten erzählen Geschichten - aber nur, wenn wir die richtigen Fragen stellen.\n\nWie nutzt ihr Analytics für eure Strategien?\n\n#analytics #datenanalyse #marketing"
-    ];
-    
-    const randomPost = emergencyPosts[Math.floor(Math.random() * emergencyPosts.length)];
+    const backupPost = this.configManager.getRandomBackupPost();
     
     return {
-      text: randomPost,
-      postType: PostType.MOTIVATIONAL,
-      contentHash: this.createContentHash(randomPost),
+      text: backupPost,
+      postType: 'fallback',
+      contentHash: this.createContentHash(backupPost),
       imageCategory: 'default'
     };
   }
@@ -390,5 +266,19 @@ export class ContentService {
     ];
     
     return emergencyComments[Math.floor(Math.random() * emergencyComments.length)];
+  }
+
+  /**
+   * Reload configuration (for development)
+   */
+  public reloadConfig(): void {
+    this.configManager.reloadConfig();
+    
+    // Update default config
+    const defaults = this.configManager.getDefaults();
+    this.defaultConfig.maxLength = defaults.maxLength;
+    this.defaultConfig.includeHashtags = defaults.includeHashtags;
+    
+    logger.info("📝 ContentService config reloaded");
   }
 }
