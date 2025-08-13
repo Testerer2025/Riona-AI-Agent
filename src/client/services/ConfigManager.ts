@@ -23,7 +23,7 @@ export interface ConfigData {
 }
 
 export class ConfigManager {
-  private config: ConfigData;
+  private config!: ConfigData;
   private readonly configPath: string;
 
   constructor() {
