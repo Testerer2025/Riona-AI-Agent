@@ -6,7 +6,6 @@ import { Server } from "proxy-chain";
 import path from "path";
 import logger from "../config/logger";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
-import { assertInstagramCreds, IGusername, IGpassword } from "./secret";
 
 // Import our new services
 import { ActivityManager, ActivityType } from "./services/ActivityManager";
