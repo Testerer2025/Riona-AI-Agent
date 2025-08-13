@@ -5,7 +5,6 @@ import { Browser, Page, DEFAULT_INTERCEPT_RESOLUTION_PRIORITY } from "puppeteer"
 import { Server } from "proxy-chain";
 import path from "path";
 import logger from "../config/logger";
-import { IGpassword, IGusername } from "../secret";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
 import { assertInstagramCreds, IGusername, IGpassword } from "./secret";
 
@@ -19,6 +18,17 @@ import { InstagramAPI } from "./services/InstagramAPI";
 // FEHLENDE IMPORTS - basierend auf anderen Dateien im Projekt
 import { Post } from "../models"; // MongoDB Model (eine Ebene hoch zu src/, dann models/)
 import { runAgent } from "../Agent"; // AI Agent function (eine Ebene hoch zu src/, dann Agent.ts)
+
+// ✅ Credentials direkt aus Render-Env lesen
+const IGusername = (process.env.IGusername ?? process.env.IG_USERNAME ?? "").trim();
+const IGpassword = (process.env.IGpassword ?? process.env.IG_PASSWORD ?? "").trim();
+
+function assertInstagramCreds() {
+  if (!IGusername || !IGpassword) {
+    throw new Error("Instagram-Credentials fehlen. Bitte IGusername/IGpassword in Render → Environment Variables setzen.");
+  }
+}
+
 
 // Configure Puppeteer plugins
 puppeteer.use(StealthPlugin());
@@ -287,24 +297,24 @@ export class InstagramBot {
  */
 private async ensureLoggedIn(): Promise<void> {
   try {
-    // 1) Vorhandene Cookies laden & injizieren
+    // 1) vorhandene Cookies injizieren
     const existing = await loadCookies(this.cookiesPath).catch(() => null);
-    if (existing && existing.length) {
-      await this.page!.setCookie(...existing); // WICHTIG: Spread
+    if (existing?.length) {
+      await this.page!.setCookie(...existing);
     }
 
-    // 2) Grober Expiry-Check (sessionid)
+    // 2) Expiry-Check (sessionid)
     const now = Math.floor(Date.now() / 1000);
-    const session = (existing || []).find((c: any) => c.name === "sessionid");
-    const expired = !session || (typeof session.expires === "number" && session.expires > 0 && session.expires < now);
+    const sess = (existing || []).find((c: any) => c.name === "sessionid");
+    const expired = !sess || (typeof sess.expires === "number" && sess.expires > 0 && sess.expires < now);
 
     if (expired) {
       logger.warn("⚠️ Session abgelaufen/fehlend → Login mit Credentials.");
-      await this.loginWithCredentials(); // speichert frische Cookies
+      await this.loginWithCredentials();
       return;
     }
 
-    // 3) UI-Health-Check (wirklich eingeloggt?)
+    // 3) UI-Health-Check
     await this.page!.goto("https://www.instagram.com/", { waitUntil: "networkidle2" });
     const isLoggedIn = await this.page!.$("a[href='/direct/inbox/']");
     if (!isLoggedIn) {
@@ -316,6 +326,7 @@ private async ensureLoggedIn(): Promise<void> {
     await this.loginWithCredentials();
   }
 }
+
 
 
   /**
