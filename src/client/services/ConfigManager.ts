@@ -1,13 +1,15 @@
 import * as path from 'path';
 import logger from '../../config/logger';
+import * as fs from 'fs';
 
 export interface ThemeConfig {
   id: string;
   name: string;
   enabled: boolean;
   weight: number;
-  prompt: string;
-  imageKeywords: string[];
+  prompt?: string;  // Optional gemacht mit ?
+  promptFile?: string;  // NEU hinzugefügt
+  imageKeywords?: string[];  // Optional gemacht
   avoidPhrases?: string[];
 }
 
@@ -250,7 +252,7 @@ export class ConfigManager {
     }
     return theme.prompt || "Erstelle einen Instagram Post.";
   }
-  
+
   /**
    * Build character context for prompts
    */
