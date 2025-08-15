@@ -48,73 +48,61 @@ export class OpenAIImageService {
   /**
    * Generate image based on post content
    */
-  public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
-    try {
-      // SAFETY CHECK: Ensure content is actually a string
-      if (typeof content !== 'string') {
-        logger.error(`❌ Content is not a string! Type: ${typeof content}, Value: ${JSON.stringify(content)}`);
-        throw new Error(`Expected string, got ${typeof content}`);
-      }
-      
-      if (!content || content.trim().length === 0) {
-        logger.error("❌ Content is empty or undefined");
-        throw new Error("Content cannot be empty");
-      }
-      
-      logger.info(`🔍 DEBUG - Content validation passed. Length: ${content.length} chars`);
-      
-      // Create direct prompt from post content - IMPROVED
-      const prompt = this.createPromptFromPostContent(content, category);
-      
-      return await this.generateImage({
-        prompt,
-        category,
-        filename: `openai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      });
-      
-    } catch (error) {
-      logger.error("❌ Content-based DALL-E generation failed:", error);
-      throw error;
-    }
+ public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
+  try {
+    const prompt = this.createPromptFromPostContent(content, category);
+    return await this.generateImage({
+      prompt,
+      category,
+      filename: `openai_${Date.now()}`
+    });
+  } catch (error) {
+    logger.error("❌ Content-based generation failed, trying simple prompt...");
+    
+    // Fallback zu einfacherem Prompt
+    const simplePrompt = `Professional ${category} business photo for social media`;
+    return await this.generateImage({
+      prompt: simplePrompt,
+      category,
+      filename: `fallback_${Date.now()}`
+    });
   }
+}
 
   /**
    * Create prompt directly from post content - NEW METHOD
    */
   private createPromptFromPostContent(postContent: string, category: string): string {
     // Clean the post content (remove hashtags, but keep most content)
-    const cleanContent = postContent
-      .replace(/#\w+/g, '') // Remove hashtags
-      .replace(/[🔮💡📊⚡🚀🎯✨📈📱💻🌟⭐]/g, ' ') // Remove common emojis, keep text emojis like arrows
-      .replace(/\s+/g, ' ') // Multiple spaces to single
-      .trim();
-      // REMOVED: .substring(0, 300) - no artificial limit!
+     const cleanContent = postContent
+    .replace(/#\w+/g, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // Alle Emojis weg
+    .replace(/[^\w\s.,!?äöüÄÖÜß-]/g, ' ')   // Nur sichere Zeichen
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Stelle sicher, dass wir unter 3500 Zeichen bleiben (Sicherheitspuffer)
+  const truncatedContent = cleanContent.length > 300 
+    ? cleanContent.substring(0, 297) + '...'
+    : cleanContent;
 
     // NEW IMPROVED PROMPT STRUCTURE
     const basePrompt = `Create a highly realistic, professional stock photo that visually represents the following social media tip or advice. Focus on the concept, not the literal words. Avoid showing any readable or legible text in the image. Use realistic lighting, natural colors, high detail, and a clean modern setting.
 
-Theme: ${cleanContent}
-
-Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography, 8k resolution.`;
+Theme: ${truncatedContent}
+Context: ${category} environment
+Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography`;
     
-    // Add category-specific context (optional enhancement)
-    const categoryContext = {
-      'business': ' Business office environment.',
-      'social-media': ' Digital marketing workspace.',
-      'tech': ' Technology and innovation setting.',
-      'team': ' Team collaboration environment.',
-      'marketing': ' Creative marketing atmosphere.',
-      'analytics': ' Data analysis workspace.',
-      'default': ' Professional business setting.'
-    };
-
-    const context = categoryContext[category as keyof typeof categoryContext] || categoryContext.default;
-    const fullPrompt = basePrompt + context;
-    
-    // DEBUG: Log the full prompt length
-    logger.info(`📝 Full DALL-E prompt (${fullPrompt.length} chars): "${fullPrompt}"`);
-    
-    return fullPrompt;
+  // Log für Debugging
+  logger.info(`🎨 DALL-E prompt length: ${basePrompt.length} chars`);
+  
+  // Sicherheitscheck
+  if (basePrompt.length > 3500) {
+    logger.warn('⚠️ DALL-E prompt too long, truncating...');
+    return basePrompt.substring(0, 3500);
+  }
+  
+  return basePrompt;
   }
 
   /**
