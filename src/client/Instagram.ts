@@ -514,46 +514,18 @@ private async ensureLoggedIn(): Promise<void> {
         };
       }
 
-      // 4. ORIGINAL: Generiere gezielten Post basierend auf AI-Analyse
-      const targetedPrompt = `
-      Erstelle einen Instagram-Post für eine Social Media Agentur basierend auf dieser strategischen Analyse:
+    // NEU - ContentService mit Historie-Kontext nutzen
+    const historyContext = {
+      avoid_themes: guidelines.avoid_themes,
+      avoid_words: guidelines.avoid_words,
+      avoid_emojis: guidelines.avoid_emojis,
+      recommended_theme: guidelines.recommended_theme,
+      fresh_elements: guidelines.fresh_elements
+    };
 
-      **VERMEIDE DIESE ÜBERSTRAPAZIERTEN ELEMENTE:**
-      - Themen: ${guidelines.avoid_themes?.join(', ') || 'Keine spezifischen'}
-      - Strukturen: ${guidelines.avoid_structures?.join(', ') || 'Keine spezifischen'}
-      - Wörter: ${guidelines.avoid_words?.join(', ') || 'Keine spezifischen'} 
-      - Emojis: ${guidelines.avoid_emojis?.join(', ') || 'Keine spezifischen'}
+    const generatedContent = await this.contentService.generatePostWithHistory(historyContext);
+    const postContent = generatedContent.text;
 
-      **NUTZE DIESE FRISCHEN ANSÄTZE:**
-      - Thema: ${guidelines.recommended_theme || 'Kundengeschichten oder Brancheninsights'}
-      - Struktur: ${guidelines.recommended_structure || 'Storytelling oder persönliche Anekdote'}
-      - Tonfall: ${guidelines.recommended_tone || 'Ehrlich und bodenständig'}
-      - Frische Elemente: ${guidelines.fresh_elements?.join(', ') || 'Neue Perspektiven'}
-
-      **ANFORDERUNGEN:**
-      - 300-450 Zeichen für Instagram
-      - Professionell aber authentisch
-      - Deutsch
-      - Echter Mehrwert für die Community
-      - Komplett anders als die analysierten Posts
-      - Call-to-Action in Form einer Frage oder Diskussionsanstoß
-
-      **BEISPIEL-THEMEN (falls du Inspiration brauchst):**
-      - Wie sich die Agentur-Landschaft verändert
-      - Lustige Kundenanfragen und was wir daraus lernen
-      - Warum manche Kampagnen scheitern (ehrlich)
-      - Behind-the-scenes von Projekt-Challenges
-      - Wie AI unser Daily Business verändert
-      - Was Kunden wirklich wollen vs. was sie sagen
-      - Trends die wir in verschiedenen Branchen sehen
-      - Erfolgsgeschichten unserer Kunden (anonymisiert)
-
-      Antworte nur mit dem fertigen Instagram-Post Text, keine Erklärungen.
-      `;
-
-      logger.info("🎨 Generiere gezielten Post basierend auf intelligenter AI-Analyse...");
-      const targetedPostResponse = await runAgent(null as any, targetedPrompt);
-      const postContent = this.parseAIResponse(targetedPostResponse);
 
       // 5. Generate AI image based on actual content
       logger.info("🤖 Generating AI image based on analyzed post content...");

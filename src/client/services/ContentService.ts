@@ -80,6 +80,74 @@ public async generatePost(config?: Partial<ContentConfig>): Promise<GeneratedCon
   }
 }
 
+/**
+ * Generate post with history context
+ */
+public async generatePostWithHistory(historyContext: any): Promise<GeneratedContent> {
+  const finalConfig = { ...this.defaultConfig };
+  
+  // Add history context to config
+  if (historyContext) {
+    finalConfig.avoidKeywords = historyContext.avoid_words || [];
+    finalConfig.preferredTopics = historyContext.fresh_elements || [];
+  }
+  
+  try {
+    logger.info("🎨 Starting post generation with history context...");
+    
+    // Select theme as usual
+    const theme = this.configManager.selectWeightedTheme();
+    logger.info(`📋 Theme selected: "${theme.name}" (ID: ${theme.id})`);
+    
+    // Generate with history context
+    const content = await this.generateContentForTheme(theme, finalConfig);
+    logger.info(`✅ Post generated with history awareness: ${content.length} characters`);
+    
+    const contentHash = this.createContentHash(content);
+    const imageCategory = this.determineImageCategoryFromTheme(theme);
+    
+    return {
+      text: content,
+      postType: theme.id,
+      contentHash,
+      imageCategory
+    };
+    
+  } catch (error) {
+    logger.error("❌ Content generation with history failed:", error);
+    return this.getEmergencyContent();
+  }
+}
+
+/**
+ * Select theme avoiding recent history
+ */
+public selectWeightedThemeWithHistory(recentThemes: string[]): ThemeConfig {
+  const enabledThemes = this.getEnabledThemes();
+  
+  // Filter out recently used themes if possible
+  const availableThemes = enabledThemes.filter(
+    theme => !recentThemes.includes(theme.id)
+  );
+  
+  // Use available themes or fall back to all if none left
+  const themesToUse = availableThemes.length > 0 ? availableThemes : enabledThemes;
+  
+  // Continue with weighted selection
+  const weightedThemes: ThemeConfig[] = [];
+  for (const theme of themesToUse) {
+    for (let i = 0; i < theme.weight; i++) {
+      weightedThemes.push(theme);
+    }
+  }
+  
+  const randomIndex = Math.floor(Math.random() * weightedThemes.length);
+  const selectedTheme = weightedThemes[randomIndex];
+  
+  logger.info(`🎲 Selected theme (history-aware): ${selectedTheme.name}`);
+  return selectedTheme;
+}
+
   /**
    * Generate content for specific theme
    */
@@ -88,34 +156,38 @@ private async generateContentForTheme(theme: ThemeConfig, config: ContentConfig)
     // Get character context
     const characterContext = this.configManager.buildCharacterContext();
     
-    // Build prompt from theme config WITH character context
-    let prompt = characterContext + "\n" + theme.prompt;
-      
-      // Replace variables in prompt
-      prompt = prompt.replace(/{{maxLength}}/g, config.maxLength.toString());
-      prompt = prompt.replace(/{{dayOfWeek}}/g, this.getCurrentDayOfWeek());
-      
-      // Add avoid keywords if specified
-      if (config.avoidKeywords && config.avoidKeywords.length > 0) {
-        prompt += `\n\nVermeide diese Wörter: ${config.avoidKeywords.join(', ')}`;
-      }
-      
-      // Add preferred topics if specified
-      if (config.preferredTopics && config.preferredTopics.length > 0) {
-        prompt += `\n\nBevorzuge diese Themen: ${config.preferredTopics.join(', ')}`;
-      }
-      
-      logger.info(`🤖 Generating content with theme: ${theme.name}`);
-      
-      // Call AI agent
-      const result = await runAgent(null as any, prompt);
-      return this.parseAIResponse(result);
-      
-    } catch (error) {
-      logger.error(`❌ Failed to generate content for theme ${theme.id}:`, error);
-      throw error;
+    // Load prompt from file or use inline
+    let themePrompt = theme.promptFile 
+      ? this.configManager.loadPromptFromFile(theme)
+      : theme.prompt || "";
+    
+    // Replace variables
+    themePrompt = themePrompt.replace(/{{maxLength}}/g, config.maxLength.toString());
+    themePrompt = themePrompt.replace(/{{dayOfWeek}}/g, this.getCurrentDayOfWeek());
+    
+    // Build full prompt with character + history context
+    let fullPrompt = characterContext + "\n" + themePrompt;
+    
+    // Add history context if available
+    if (config.avoidKeywords && config.avoidKeywords.length > 0) {
+      fullPrompt += `\n\nBASIEREND AUF HISTORIE-ANALYSE:`;
+      fullPrompt += `\nVermeide diese überstrapazierten Wörter: ${config.avoidKeywords.join(', ')}`;
     }
+    
+    if (config.preferredTopics && config.preferredTopics.length > 0) {
+      fullPrompt += `\nBevorzuge diese frischen Elemente: ${config.preferredTopics.join(', ')}`;
+    }
+    
+    logger.info(`🤖 Generating content with theme: ${theme.name} + history context`);
+    
+    const result = await runAgent(null as any, fullPrompt);
+    return this.parseAIResponse(result);
+    
+  } catch (error) {
+    logger.error(`❌ Failed to generate content for theme ${theme.id}:`, error);
+    throw error;
   }
+}
 
   /**
    * Generate content for comments
