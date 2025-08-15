@@ -83,10 +83,13 @@ export class ContentService {
   /**
    * Generate content for specific theme
    */
-  private async generateContentForTheme(theme: ThemeConfig, config: ContentConfig): Promise<string> {
-    try {
-      // Build prompt from theme config
-      let prompt = theme.prompt;
+private async generateContentForTheme(theme: ThemeConfig, config: ContentConfig): Promise<string> {
+  try {
+    // Get character context
+    const characterContext = this.configManager.buildCharacterContext();
+    
+    // Build prompt from theme config WITH character context
+    let prompt = characterContext + "\n" + theme.prompt;
       
       // Replace variables in prompt
       prompt = prompt.replace(/{{maxLength}}/g, config.maxLength.toString());

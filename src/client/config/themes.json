@@ -5,41 +5,35 @@
       "name": "Agentur Showcase",
       "enabled": true,
       "weight": 3,
-      "prompt": "Erstelle einen Instagram-Post für eine Social Media Marketing Agentur showcasing expertise.\n\nStyle Options (wähle eine zufällig):\n- Client Success Story (anonymisiert)\n- Behind-the-scenes Agentur-Prozess\n- Branchen-Insight aus Erfahrung\n- Problem-Lösung Showcase\n\nAnforderungen:\n- {{maxLength}} Zeichen max\n- Deutsche Sprache\n- Professionell aber nahbar\n- Zeige Expertise ohne Angeberei\n- Füge eine engagierende Frage am Ende hinzu\n- 3-4 relevante Hashtags\n\nVermeide diese überstrapazierten Phrasen: \"Erfolgreiche Social Media Strategie\", \"Was denkt ihr?\", \"Schreibt uns!\"\n\nGib nur den Post-Text zurück.",
-      "imageKeywords": ["business", "office", "team", "marketing", "social media"],
-      "avoidPhrases": ["Erfolgreiche Social Media Strategie", "Was denkt ihr?", "Schreibt uns!"]
+      "promptFile": "agency_showcase.txt",
     },
     {
       "id": "tips_tricks",
       "name": "Tipps & Tricks",
       "enabled": true,
-      "weight": 3,
-      "prompt": "Erstelle einen praktischen Social Media Marketing Tipp-Post.\n\nTipp-Kategorien (wähle eine):\n- Content Creation Tricks\n- Engagement-Strategien\n- Analytics-Insights\n- Platform-spezifische Hacks\n- Zeitspar-Tools\n\nAnforderungen:\n- {{maxLength}} Zeichen max\n- Deutsche Sprache\n- Umsetzbar und spezifisch\n- Benefit/Resultat einbeziehen\n- Zur Implementierung ermutigen\n- Professioneller Ton\n\nFormat: 💡 Tipp: [spezifischer Ratschlag] → [erwartetes Ergebnis/Benefit]\n\nGib nur den Post-Text zurück.",
-      "imageKeywords": ["tips", "marketing", "social media", "strategy", "digital"]
+      "weight": 4,
+      "promptFile": "tips_tricks.txt",
     },
     {
       "id": "motivational",
-      "name": "Motivational",
+      "name": "Motivational Monday",
       "enabled": true,
       "weight": 2,
-      "prompt": "Erstelle einen motivationalen {{dayOfWeek}}-Post für Business-Owner und Marketer.\n\nThemen (wähle eines):\n- Unternehmerisches Mindset\n- Kreative Ausdauer\n- Team-Zusammenarbeit\n- Innovations-Mindset\n- Kundenfokus\n\nAnforderungen:\n- {{maxLength}} Zeichen max\n- Deutsche Sprache\n- Inspirierend aber nicht kitschig\n- Business-relevant\n- Reflexionsfrage einbeziehen\n- Bezug zu Marketing/Business-Herausforderungen\n\nVermeide generische Motivation - fokussiere auf business-spezifische Inspiration.\n\nGib nur den Post-Text zurück.",
-      "imageKeywords": ["motivation", "success", "business", "inspiration", "team"]
+      "promptFile": "motivational.txt",
     },
     {
-      "id": "industry_news",
-      "name": "Branchen-News",
+      "id": "tool_review",
+      "name": "Tool-Empfehlung",
       "enabled": true,
-      "weight": 1,
-      "prompt": "Erstelle einen Post über einen aktuellen Digital Marketing Trend oder Entwicklung.\n\nThemenbereiche (wähle eines):\n- AI im Marketing\n- Platform-Updates (Instagram, TikTok, LinkedIn)\n- Verbraucherverhalten-Änderungen\n- Neue Marketing-Tools\n- Privacy/Regulation-Änderungen\n\nAnforderungen:\n- {{maxLength}} Zeichen max\n- Deutsche Sprache\n- Bildend und informativ\n- Praktische Implikationen einbeziehen\n- Professioneller Experten-Ton\n- Nach Community-Meinungen fragen\n\nFormat: 🔮 Trend Update: [Trend] → [warum es wichtig ist] → [was dagegen tun]\n\nGib nur den Post-Text zurück.",
-      "imageKeywords": ["trends", "digital", "innovation", "technology", "future"]
+      "weight": 2,
+      "promptFile": "tool_review.txt",
     },
     {
-      "id": "behind_scenes",
-      "name": "Behind the Scenes",
+      "id": "trend_update",
+      "name": "Trend Update",
       "enabled": true,
       "weight": 1,
-      "prompt": "Erstelle einen authentischen Behind-the-Scenes Post über Agentur-Leben.\n\nSzenarien (wähle eines):\n- Team-Brainstorming Session Insights\n- Kunden-Meeting Learnings\n- Tool/Prozess-Entdeckungen\n- Tägliche Agentur-Herausforderungen\n- Kreative Prozess-Momente\n\nAnforderungen:\n- {{maxLength}} Zeichen max\n- Deutsche Sprache\n- Authentisch und nachvollziehbar\n- Zeige menschliche Seite des Business\n- Lesson learned einbeziehen\n- Community zum Teilen einladen\n\nTon: Konversationell, ehrlich, professionell aber persönlich\n\nGib nur den Post-Text zurück.",
-      "imageKeywords": ["team", "office", "work", "behind scenes", "agency"]
+      "promptFile": "trend_update.txt",
     }
   ],
   
@@ -48,11 +42,5 @@
     "includeHashtags": true,
     "hashtagCount": 3,
     "language": "de"
-  },
-  
-  "backupPosts": [
-    "🎯 Authentizität schlägt Perfektion. Jeden Tag.\n\nWas ist euer authentischster Marketing-Moment gewesen?\n\n#authentizität #realmarketing #storytelling #community",
-    "⚡ Plot Twist: Die besten Kampagnen entstehen oft aus \"gescheiterten\" Ideen.\n\nWelche eurer verworfenen Ideen hätte vielleicht doch funktioniert?\n\n#kreativität #ideenfindung #kampagnenentwicklung #innovation",
-    "🚀 Kleine Teams, große Wirkung: Manchmal ist weniger wirklich mehr.\n\nWas ist euer bestes Beispiel für effiziente Teamarbeit?\n\n#teamwork #effizienz #kleinesteams #grossewirkung"
-  ]
+  }
 }

@@ -237,6 +237,45 @@ export class ConfigManager {
   }
 
   /**
+   * Load prompt from file if specified
+   */
+  public loadPromptFromFile(theme: ThemeConfig): string {
+    if (theme.promptFile) {
+      try {
+        const promptPath = path.join(__dirname, '../config/prompts', theme.promptFile);
+        return fs.readFileSync(promptPath, 'utf-8');
+      } catch (error) {
+        logger.warn(`⚠️ Could not load prompt file: ${theme.promptFile}`);
+      }
+    }
+    return theme.prompt || "Erstelle einen Instagram Post.";
+  }
+  
+  /**
+   * Build character context for prompts
+   */
+  public buildCharacterContext(): string {
+    const character = (global as any).agentCharacter;
+    
+    if (!character) {
+      logger.warn("⚠️ No character loaded, using default context");
+      return "";
+    }
+    
+    // Build context from character
+    const context = [
+      `Du bist ${character.name}.`,
+      character.bio ? `Über dich: ${character.bio.join(' ')}` : '',
+      character.knowledge ? `Deine Expertise: ${character.knowledge.join(', ')}` : '',
+      character.style?.all ? `Dein Stil: ${character.style.all.join(' ')}` : '',
+      character.style?.post ? `Post-Stil: ${character.style.post.join(' ')}` : '',
+      '',  // Empty line for separation
+    ].filter(line => line).join('\n');
+    
+    return context;
+  }
+
+  /**
    * Reload configuration (for development)
    */
   public reloadConfig(): void {

@@ -3,9 +3,14 @@ import logger from "./config/logger";
 import { shutdown } from "./services";
 import app from "./app";
 import { initAgent } from "./Agent/index";
-import { connectDB } from "./config/db";  // ← HINZUFÜGEN
+import { connectDB } from "./config/db";
 
 dotenv.config();
+
+// Declare global character variable
+declare global {
+  var agentCharacter: any;
+}
 
 async function startServer() {
   try {
@@ -13,9 +18,10 @@ async function startServer() {
     await connectDB();
     logger.info("✅ Database connection established");
     
-    // DANN den Agent initialisieren:
-    await initAgent();
-    logger.info("✅ Agent initialized");
+    // ✅ DANN den Agent initialisieren UND SPEICHERN:
+    global.agentCharacter = await initAgent();
+    logger.info("✅ Agent initialized and stored globally");
+    logger.info(`📋 Character loaded: ${global.agentCharacter.name}`);
     
   } catch (err) {
     logger.error("Error during startup:", err);

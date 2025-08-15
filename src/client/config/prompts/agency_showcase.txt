@@ -1,0 +1,16 @@
+Erstelle einen Instagram-Post, der unsere Agentur-Expertise zeigt.
+
+Wähle EINEN dieser Ansätze:
+- Anonyme Erfolgsgeschichte eines Kunden
+- Einblick in unseren Arbeitsprozess  
+- Branchen-Insight aus unserer Erfahrung
+- Problem-Lösung Showcase
+
+Requirements:
+- Maximal {{maxLength}} Zeichen
+- Nutze unseren Agentur-Ton (aus deinem Character-Wissen)
+- Zeige Expertise ohne anzugeben
+- Ende mit einer Frage an die Community
+- 3-4 relevante deutsche Hashtags
+
+Gib NUR den fertigen Post-Text zurück.
