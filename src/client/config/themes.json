@@ -5,21 +5,21 @@
       "name": "Agentur Showcase",
       "enabled": true,
       "weight": 3,
-      "promptFile": "agency_showcase.txt",
+      "promptFile": "agency_showcase.txt"
     },
     {
       "id": "friday_post",
       "name": "Friday Post",
       "enabled": true,
       "weight": 3,
-      "promptFile": "friday_post.txt",
+      "promptFile": "friday_post.txt"
     },
     {
       "id": "winter_post",
       "name": "Winter Post",
       "enabled": true,
       "weight": 3,
-      "promptFile": "winter_post.txt",
+      "promptFile": "winter_post.txt"
     }
   ],
   
