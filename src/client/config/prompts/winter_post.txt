@@ -1,0 +1,15 @@
+Erstelle einen Instagram-Post, der unsere Agentur-Expertise zum Thema Winter zeigt.
+
+Wähle EINEN dieser Ansätze:
+- Was man im Winter machen kann
+- Das jetzt Sommer und kein Winter ist 
+- Das es im Winter kalt ist
+- Schlittschuhfahren im Sommer viel schwerer ist als im Winter
+
+Requirements:
+- Maximal {{maxLength}} Zeichen
+- Nutze unseren Agentur-Ton (aus deinem Character-Wissen)
+- Zeige Expertise ohne anzugeben
+- Ende mit einer Frage an die Community
+
+Gib NUR den fertigen Post-Text zurück.
