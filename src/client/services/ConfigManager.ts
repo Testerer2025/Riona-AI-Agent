@@ -180,6 +180,35 @@ export class ConfigManager {
   }
 
   /**
+ * Select theme avoiding recent history
+ */
+public selectWeightedThemeWithHistory(recentThemes: string[]): ThemeConfig {
+  const enabledThemes = this.getEnabledThemes();
+  
+  // Filter out recently used themes if possible
+  const availableThemes = enabledThemes.filter(
+    theme => !recentThemes.includes(theme.id)
+  );
+  
+  // Use available themes or fall back to all if none left
+  const themesToUse = availableThemes.length > 0 ? availableThemes : enabledThemes;
+  
+  // Continue with weighted selection
+  const weightedThemes: ThemeConfig[] = [];
+  for (const theme of themesToUse) {
+    for (let i = 0; i < theme.weight; i++) {
+      weightedThemes.push(theme);
+    }
+  }
+  
+  const randomIndex = Math.floor(Math.random() * weightedThemes.length);
+  const selectedTheme = weightedThemes[randomIndex];
+  
+  logger.info(`🎲 Selected theme (history-aware): ${selectedTheme.name}`);
+  return selectedTheme;
+}
+
+  /**
    * Get theme by ID
    */
   public getThemeById(id: string): ThemeConfig | undefined {
