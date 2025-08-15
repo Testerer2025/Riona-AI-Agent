@@ -3,7 +3,7 @@
     {
       "id": "agency_showcase",
       "name": "Agentur Showcase",
-      "enabled": true,
+      "enabled": false,
       "weight": 3,
       "promptFile": "agency_showcase.txt"
     },

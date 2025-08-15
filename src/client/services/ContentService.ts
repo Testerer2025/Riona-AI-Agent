@@ -50,35 +50,35 @@ export class ContentService {
   /**
    * Generate new post content
    */
-  public async generatePost(config?: Partial<ContentConfig>): Promise<GeneratedContent> {
-    const finalConfig = { ...this.defaultConfig, ...config };
+public async generatePost(config?: Partial<ContentConfig>): Promise<GeneratedContent> {
+  const finalConfig = { ...this.defaultConfig, ...config };  // ← WICHTIG!
+  
+  try {
+    logger.info("🎨 Starting post generation...");
     
-    try {
-      logger.info("🎨 Generating new post content...");
-      
-      // Select theme using ConfigManager
-      const theme = this.configManager.selectWeightedTheme();
-      
-      // Generate content based on selected theme
-      const content = await this.generateContentForTheme(theme, finalConfig);
-      const contentHash = this.createContentHash(content);
-      const imageCategory = this.determineImageCategoryFromTheme(theme);
-      
-      const result: GeneratedContent = {
-        text: content,
-        postType: theme.id,
-        contentHash,
-        imageCategory
-      };
-      
-      logger.info(`✅ Generated ${theme.name} post (${content.length} chars)`);
-      return result;
-      
-    } catch (error) {
-      logger.error("❌ Content generation failed:", error);
-      return this.getEmergencyContent();
-    }
+    const theme = this.configManager.selectWeightedTheme();
+    logger.info(`📋 Theme selected: "${theme.name}" (ID: ${theme.id}, Weight: ${theme.weight})`);
+    
+    const content = await this.generateContentForTheme(theme, finalConfig);
+    logger.info(`✅ Post generated successfully: ${content.length} characters`);
+    
+    const contentHash = this.createContentHash(content);
+    const imageCategory = this.determineImageCategoryFromTheme(theme);
+    
+    const result: GeneratedContent = {
+      text: content,
+      postType: theme.id,
+      contentHash,
+      imageCategory
+    };
+    
+    return result;
+    
+  } catch (error) {
+    logger.error("❌ Content generation failed:", error);
+    return this.getEmergencyContent();
   }
+}
 
   /**
    * Generate content for specific theme
