@@ -24,6 +24,26 @@ export interface ConfigData {
   backupPosts: string[];
 }
 
+export interface ImageConfig {
+  prompt: string;
+  apiStyle: 'natural' | 'vivid';
+  details: string;
+  size: '1024x1024' | '1792x1024' | '1024x1792';
+  quality: 'standard' | 'hd';
+}
+
+export interface ThemeConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  weight: number;
+  prompt?: string;
+  promptFile?: string;
+  imageKeywords?: string[];
+  avoidPhrases?: string[];
+  image?: ImageConfig;  // NEU
+}
+
 export class ConfigManager {
   private config!: ConfigData;
   private readonly configPath: string;

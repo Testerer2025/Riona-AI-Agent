@@ -5,21 +5,42 @@
       "name": "Agentur Showcase",
       "enabled": false,
       "weight": 3,
-      "promptFile": "agency_showcase.txt"
+      "promptFile": "agency_showcase.txt",
+      "image": {
+        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
+        "apiStyle": "natural",
+        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
+        "size": "1024x1024",
+        "quality": "standard"
+      }
     },
     {
       "id": "friday_post",
       "name": "Friday Post",
       "enabled": true,
       "weight": 3,
-      "promptFile": "friday_post.txt"
+      "promptFile": "friday_post.txt",
+      "image": {
+        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
+        "apiStyle": "natural",
+        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
+        "size": "1024x1024",
+        "quality": "standard"
+      }
     },
     {
       "id": "winter_post",
       "name": "Winter Post",
       "enabled": true,
       "weight": 3,
-      "promptFile": "winter_post.txt"
+      "promptFile": "winter_post.txt",
+      "image": {
+        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
+        "apiStyle": "natural",
+        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
+        "size": "1024x1024",
+        "quality": "standard"
+      }
     }
   ],
   

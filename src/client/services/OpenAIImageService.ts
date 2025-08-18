@@ -45,6 +45,82 @@ export class OpenAIImageService {
     }
   }
 
+/**
+ * Generate image for a specific theme with custom settings
+ * NEW METHOD - Add after generateImageFromContent
+ */
+public async generateImageForTheme(theme: any, postContent: string): Promise<string> {
+  try {
+    logger.info(`🎨 Generating theme-based image for: ${theme.name}`);
+    
+    // Create prompt based on theme configuration
+    const imagePrompt = this.createThemeImagePrompt(theme, postContent);
+    
+    // Use theme settings or defaults
+    const apiStyle = theme.image?.apiStyle || 'natural';
+    const size = theme.image?.size || '1024x1024';
+    const quality = theme.image?.quality || 'standard';
+    
+    logger.info(`🎨 Using settings - Style: ${apiStyle}, Size: ${size}, Quality: ${quality}`);
+    
+    // Generate filename
+    const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const category = theme.id.replace('_', '-');
+    
+    // Call API with theme settings
+    const imageUrl = await this.callOpenAIImagesAPIWithSettings(
+      imagePrompt,
+      apiStyle,
+      size,
+      quality
+    );
+    
+    // Download and save
+    const imagePath = await this.downloadAndSaveImage(imageUrl, category, filename);
+    return imagePath;
+    
+  } catch (error) {
+    logger.error(`❌ Theme-based image generation failed for ${theme.id}:`, error);
+    // Fallback to content-based generation
+    return this.generateImageFromContent(postContent, 'default');
+  }
+}
+
+/**
+ * Create image prompt from theme configuration
+ * NEW METHOD - Add after generateImageForTheme
+ */
+private createThemeImagePrompt(theme: any, postContent: string): string {
+  if (theme.image?.prompt) {
+    // Clean post content for context
+    const cleanContent = postContent
+      .replace(/#\w+/g, '')
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 200);
+    
+    // Build complete prompt
+    let fullPrompt = theme.image.prompt;
+    
+    if (theme.image.details) {
+      fullPrompt += `. ${theme.image.details}`;
+    }
+    
+    if (cleanContent) {
+      fullPrompt += `. Context: ${cleanContent}`;
+    }
+    
+    logger.info(`📝 Theme image prompt (${fullPrompt.length} chars): "${fullPrompt.substring(0, 100)}..."`);
+    return fullPrompt;
+  }
+  
+  // Fallback to old system
+  logger.info('📝 No theme image config, using content-based prompt');
+  return this.createPromptFromPostContent(postContent, theme.id || 'default');
+}
+
+
   /**
    * Generate image based on post content
    */
@@ -99,47 +175,65 @@ export class OpenAIImageService {
   /**
    * Call OpenAI Images API
    */
-  private async callOpenAIImagesAPI(prompt: string): Promise<string> {
-    try {
-      logger.info("🔄 Calling OpenAI Images API...");
-      
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: "dall-e-3",
-          prompt: prompt,
-          n: 1,
-          size: "1024x1024",
-          quality: "standard",
-          style: "natural" // or "vivid" for more dramatic images
-        })
-      });
+  /**
+ * Call OpenAI Images API - REPLACE the existing method
+ */
+private async callOpenAIImagesAPI(prompt: string): Promise<string> {
+  // Redirect to new method with default settings
+  return this.callOpenAIImagesAPIWithSettings(prompt, 'natural', '1024x1024', 'standard');
+}
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenAI API Error ${response.status}: ${errorText}`);
-      }
+/**
+ * Call OpenAI Images API with custom settings
+ * NEW METHOD - Add right after callOpenAIImagesAPI
+ */
+private async callOpenAIImagesAPIWithSettings(
+  prompt: string,
+  style: string = 'natural',
+  size: string = '1024x1024', 
+  quality: string = 'standard'
+): Promise<string> {
+  try {
+    logger.info(`🔄 Calling OpenAI Images API with settings...`);
+    logger.info(`📐 Size: ${size}, 🎨 Style: ${style}, 💎 Quality: ${quality}`);
+    
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: prompt,
+        n: 1,
+        size: size,
+        quality: quality,
+        style: style
+      })
+    });
 
-      const data = await response.json();
-      
-      if (!data.data || !data.data[0] || !data.data[0].url) {
-        throw new Error('Invalid response format from OpenAI Images API');
-      }
-
-      const imageUrl = data.data[0].url;
-      logger.info("✅ DALL-E 3 image URL received");
-      
-      return imageUrl;
-
-    } catch (error) {
-      logger.error("❌ OpenAI Images API call failed:", error);
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API Error ${response.status}: ${errorText}`);
     }
+
+    const data = await response.json();
+    
+    if (!data.data || !data.data[0] || !data.data[0].url) {
+      throw new Error('Invalid response format from OpenAI Images API');
+    }
+
+    const imageUrl = data.data[0].url;
+    logger.info("✅ DALL-E 3 image URL received");
+    
+    return imageUrl;
+
+  } catch (error) {
+    logger.error("❌ OpenAI Images API call failed:", error);
+    throw error;
   }
+}
 
   /**
    * Download image from URL and save to file system

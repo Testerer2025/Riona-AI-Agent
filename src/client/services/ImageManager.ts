@@ -100,26 +100,32 @@ export class ImageManager {
   /**
    * Get image for content - ENHANCED with AI
    */
-  public async getImageForContent(content: string): Promise<string> {
-    try {
-      logger.info(`🎨 Generating image for content: "${content.substring(0, 50)}..."`);
-      
-      const category = this.determineCategoryFromContent(content);
-      
-      // Generate AI image based on actual content
-      const aiImage = await this.openaiImages.generateImageFromContent(content, category);
-      
-      logger.info(`✅ Generated content-specific AI image: ${path.basename(aiImage)}`);
+  public async getImageForContent(content: string, theme?: any): Promise<string> {
+  try {
+    logger.info(`🎨 Generating image for content: "${content.substring(0, 50)}..."`);
+    
+    // If theme provided and has image config, use theme-based generation
+    if (theme && theme.image) {
+      logger.info(`🎨 Using theme-based image generation for: ${theme.name}`);
+      const aiImage = await this.openaiImages.generateImageForTheme(theme, content);
       return aiImage;
-      
-    } catch (error) {
-      logger.error("❌ Content-based image generation failed:", error);
-      
-      // Fallback to category-based generation
-      const category = this.determineCategoryFromContent(content);
-      return await this.getImageForCategory(category);
     }
+    
+    // Otherwise use old content-based system
+    const category = this.determineCategoryFromContent(content);
+    const aiImage = await this.openaiImages.generateImageFromContent(content, category);
+    
+    logger.info(`✅ Generated content-specific AI image: ${path.basename(aiImage)}`);
+    return aiImage;
+    
+  } catch (error) {
+    logger.error("❌ Content-based image generation failed:", error);
+    
+    // Fallback
+    const category = this.determineCategoryFromContent(content);
+    return await this.getImageForCategory(category);
   }
+}
 
   /**
    * Create AI prompt for category
