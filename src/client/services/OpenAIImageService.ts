@@ -73,36 +73,27 @@ export class OpenAIImageService {
    * Create prompt directly from post content - NEW METHOD
    */
   private createPromptFromPostContent(postContent: string, category: string): string {
-    // Clean the post content (remove hashtags, but keep most content)
-     const cleanContent = postContent
-    .replace(/#\w+/g, '')
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // Alle Emojis weg
-    .replace(/[^\w\s.,!?äöüÄÖÜß-]/g, ' ')   // Nur sichere Zeichen
-    .replace(/\s+/g, ' ')
-    .trim();
+    // Minimale Bearbeitung - nur das Nötigste!
+    const cleanContent = postContent
+      .replace(/#\w+/g, '')  // Hashtags entfernen
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')  // Emojis entfernen
+      .replace(/\s+/g, ' ')  // Mehrfache Spaces zu einem
+      .trim()
+      .substring(0, 600);  // Länge begrenzen
 
-  // Stelle sicher, dass wir unter 3500 Zeichen bleiben (Sicherheitspuffer)
-  const truncatedContent = cleanContent.length > 300 
-    ? cleanContent.substring(0, 297) + '...'
-    : cleanContent;
-
-    // NEW IMPROVED PROMPT STRUCTURE
+    // Rest bleibt original - keine aggressive Filterung!
+    
     const basePrompt = `Create a highly realistic, professional stock photo that visually represents the following social media tip or advice. Focus on the concept, not the literal words. Avoid showing any readable or legible text in the image. Use realistic lighting, natural colors, high detail, and a clean modern setting.
 
-Theme: ${truncatedContent}
-Context: ${category} environment
-Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography`;
+  Theme: ${cleanContent}
+
+  Context: ${category} environment
+
+  Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography`;
     
-  // Log für Debugging
-  logger.info(`🎨 DALL-E prompt length: ${basePrompt.length} chars`);
-  
-  // Sicherheitscheck
-  if (basePrompt.length > 3500) {
-    logger.warn('⚠️ DALL-E prompt too long, truncating...');
-    return basePrompt.substring(0, 3500);
-  }
-  
-  return basePrompt;
+    logger.info(`🎨 DALL-E prompt length: ${basePrompt.length} chars`);
+    
+    return basePrompt;
   }
 
   /**
