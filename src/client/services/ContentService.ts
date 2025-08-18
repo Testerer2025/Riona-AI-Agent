@@ -295,12 +295,14 @@ private async generateContentForTheme(theme: ThemeConfig, config: ContentConfig)
    */
   private getEmergencyContent(): GeneratedContent {
     const backupPost = this.configManager.getRandomBackupPost();
+    const fallbackTheme = this.configManager.selectWeightedTheme();
     
     return {
       text: backupPost,
       postType: 'fallback',
       contentHash: this.createContentHash(backupPost),
-      imageCategory: 'default'
+      imageCategory: 'default',
+      theme: fallbackTheme
     };
   }
 
