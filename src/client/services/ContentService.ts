@@ -17,6 +17,7 @@ export interface GeneratedContent {
   postType: string;  // Changed from PostType enum to string
   contentHash: string;
   imageCategory: string;
+  theme: ThemeConfig;
 }
 
 export interface ContentConfig {
