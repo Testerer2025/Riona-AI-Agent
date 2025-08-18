@@ -2,6 +2,7 @@ import path from "path";
 import fs from 'fs';
 import logger from "../../config/logger";
 import { OpenAIImageService } from "./OpenAIImageService";
+import type { ThemeConfig } from './ConfigManager';
 
 export interface ImageCategory {
   name: string;
@@ -100,7 +101,7 @@ export class ImageManager {
   /**
    * Get image for content - ENHANCED with AI
    */
-  public async getImageForContent(content: string, theme?: any): Promise<string> {
+  public async getImageForContent(content: string, theme?: ThemeConfig): Promise<string> {
   try {
     logger.info(`🎨 Generating image for content: "${content.substring(0, 50)}..."`);
     

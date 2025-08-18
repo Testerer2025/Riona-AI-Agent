@@ -45,6 +45,34 @@ export class OpenAIImageService {
     }
   }
 
+
+
+  /**
+   * Generate image based on post content
+   */
+ public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
+  try {
+    const prompt = this.createPromptFromPostContent(content, category);
+    return await this.generateImage({
+      prompt,
+      category,
+      filename: `openai_${Date.now()}`
+    });
+  } catch (error) {
+    logger.error("❌ Content-based generation failed, trying simple prompt...");
+    
+    // Fallback zu einfacherem Prompt
+    const simplePrompt = `Professional ${category} business photo for social media`;
+    return await this.generateImage({
+      prompt: simplePrompt,
+      category,
+      filename: `fallback_${Date.now()}`
+    });
+  }
+}
+
+
+
 /**
  * Generate image for a specific theme with custom settings
  * NEW METHOD - Add after generateImageFromContent
@@ -118,31 +146,6 @@ private createThemeImagePrompt(theme: any, postContent: string): string {
   // Fallback to old system
   logger.info('📝 No theme image config, using content-based prompt');
   return this.createPromptFromPostContent(postContent, theme.id || 'default');
-}
-
-
-  /**
-   * Generate image based on post content
-   */
- public async generateImageFromContent(content: string, category: string = 'default'): Promise<string> {
-  try {
-    const prompt = this.createPromptFromPostContent(content, category);
-    return await this.generateImage({
-      prompt,
-      category,
-      filename: `openai_${Date.now()}`
-    });
-  } catch (error) {
-    logger.error("❌ Content-based generation failed, trying simple prompt...");
-    
-    // Fallback zu einfacherem Prompt
-    const simplePrompt = `Professional ${category} business photo for social media`;
-    return await this.generateImage({
-      prompt: simplePrompt,
-      category,
-      filename: `fallback_${Date.now()}`
-    });
-  }
 }
 
   /**

@@ -69,7 +69,8 @@ public async generatePost(config?: Partial<ContentConfig>): Promise<GeneratedCon
       text: content,
       postType: theme.id,
       contentHash,
-      imageCategory
+      imageCategory,
+      theme
     };
     
     return result;
@@ -110,7 +111,8 @@ public async generatePostWithHistory(historyContext: any): Promise<GeneratedCont
       text: content,
       postType: theme.id,
       contentHash,
-      imageCategory
+      imageCategory,
+      theme
     };
     
   } catch (error) {

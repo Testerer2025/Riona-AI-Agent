@@ -525,11 +525,12 @@ private async ensureLoggedIn(): Promise<void> {
 
     const generatedContent = await this.contentService.generatePostWithHistory(historyContext);
     const postContent = generatedContent.text;
+    const selectedTheme = generatedContent.theme
 
 
       // 5. Generate AI image based on actual content
       logger.info("🤖 Generating AI image based on analyzed post content...");
-      const imagePath = await this.imageManager.getImageForContent(postContent);
+      const imagePath = await this.imageManager.getImageForContent(postContent, selectedTheme);
 
       // 6. Final Check - exakte Duplikate
       const contentHash = require('crypto').createHash('md5').update(postContent).digest('hex');
@@ -558,7 +559,7 @@ private async ensureLoggedIn(): Promise<void> {
     logger.info("🔄 Fallback zu einfacher Post-Generierung...");
     
     const content = await this.contentService.generatePost();
-    const imagePath = await this.imageManager.getImageForContent(content.text);
+    const imagePath = await this.imageManager.getImageForContent(content.text, content.theme);
     
     return { content: content.text, imagePath };
   }
