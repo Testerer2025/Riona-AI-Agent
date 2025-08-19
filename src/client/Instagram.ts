@@ -6,6 +6,7 @@ import { Server } from "proxy-chain";
 import path from "path";
 import logger from "../config/logger";
 import { Instagram_cookiesExist, loadCookies, saveCookies } from "../utils";
+import { ConfigManager } from './services/ConfigManager';
 
 // Import our new services
 import { ActivityManager, ActivityType } from "./services/ActivityManager";
@@ -49,6 +50,7 @@ export class InstagramBot {
   private imageManager: ImageManager;
   private historyService: HistoryService;
   private instagramAPI: InstagramAPI;
+  private configManager: ConfigManager;
 
   // Configuration
   private readonly isTestMode: boolean;
@@ -63,6 +65,7 @@ export class InstagramBot {
     this.imageManager = new ImageManager();
     this.historyService = new HistoryService();
     this.instagramAPI = new InstagramAPI();
+    this.configManager = new ConfigManager();
 
     logger.info(`🤖 InstagramBot initialized (${this.isTestMode ? 'TEST' : 'PRODUCTION'} mode)`);
   }
