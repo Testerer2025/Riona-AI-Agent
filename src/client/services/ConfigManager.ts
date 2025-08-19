@@ -30,7 +30,6 @@ export interface ImageConfig {
   details: string;
   size: '1024x1024' | '1792x1024' | '1024x1792';
   quality: 'standard' | 'hd';
-  referenceImages?: string[];
 }
 
 export interface ThemeConfig {

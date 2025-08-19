@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../../config/logger';
-import FormData from 'form-data';
 
 export interface OpenAIImageRequest {
   prompt: string;
@@ -12,7 +11,6 @@ export interface OpenAIImageRequest {
 export class OpenAIImageService {
   private readonly apiKey: string;
   private readonly apiUrl = 'https://api.openai.com/v1/images/generations';
-  private readonly editsUrl = 'https://api.openai.com/v1/images/edits';
 
   constructor() {
     this.apiKey = process.env.OPENAI_API_KEY || '';
@@ -96,41 +94,14 @@ public async generateImageForTheme(theme: any, postContent: string): Promise<str
     // Generate filename
     const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const category = theme.id.replace('_', '-');
-
-    // 🔸 NEU: Referenzbilder relativ zu REF_IMAGES_DIR auflösen
-    const refDir = process.env.REF_IMAGES_DIR
-      ? path.resolve(process.env.REF_IMAGES_DIR)
-      : path.resolve('refimages');
-    const refNames: string[] = Array.isArray(theme?.image?.referenceImages) ? theme.image.referenceImages : [];
-    const refPaths = refNames
-      .map(n => path.join(refDir, n))
-      .filter(p => {
-        const ok = fs.existsSync(p);
-        if (!ok) logger.warn(`⚠️ Reference image not found: ${p}`);
-        return ok;
-      });
-
-    let imageUrl: string;
-
-    if (refPaths.length > 0) {
-      // 🔁 Mit Referenzen: Edits (gpt-image-1)
-      logger.info(`🧩 Using ${refPaths.length} reference image(s) via Edits`);
-      imageUrl = await this.callOpenAIImagesEdits({
-        prompt: imagePrompt,
-        imagePaths: refPaths,
-        size,
-        quality
-      });
-      // (apiStyle wird bei Edits nicht genutzt)
-    } else {
-      // 🧠 Ohne Referenzen: wie bisher DALL·E 3 Generations
-      imageUrl = await this.callOpenAIImagesAPIWithSettings(
-        imagePrompt,
-        apiStyle,
-        size,
-        quality
-      );
-    }
+    
+    // Call API with theme settings
+    const imageUrl = await this.callOpenAIImagesAPIWithSettings(
+      imagePrompt,
+      apiStyle,
+      size,
+      quality
+    );
     
     // Download and save
     const imagePath = await this.downloadAndSaveImage(imageUrl, category, filename);
@@ -142,7 +113,6 @@ public async generateImageForTheme(theme: any, postContent: string): Promise<str
     return this.generateImageFromContent(postContent, 'default');
   }
 }
-
 
 /**
  * Create image prompt from theme configuration
@@ -267,45 +237,6 @@ private async callOpenAIImagesAPIWithSettings(
     throw error;
   }
 }
-/*************************************************
- * OpenAI Images Edits (gpt-image-1) – mehrere Referenzbilder
- *************************************************/
-private async callOpenAIImagesEdits(params: {
-  prompt: string;
-  imagePaths: string[];
-  size?: string;                    // z. B. "1024x1024"
-  quality?: 'standard' | 'hd';
-}): Promise<string> {
-  const form = new FormData();
-  form.append('model', 'gpt-image-1');   // Edits-Modell
-  form.append('prompt', params.prompt);
-  if (params.size) form.append('size', params.size);
-  if (params.quality) form.append('quality', params.quality);
-
-  for (const p of params.imagePaths) {
-    form.append('image[]', fs.createReadStream(p));
-  }
-
-  const response = await fetch(this.editsUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${this.apiKey}`
-    },
-    body: form as any
-  });
-
-  if (!response.ok) {
-    const txt = await response.text();
-    logger.error(`OpenAI Edits Error ${response.status}: ${txt}`);
-    throw new Error(`OpenAI Edits Error ${response.status}`);
-  }
-
-  const data = await response.json();
-  const url = data?.data?.[0]?.url;
-  if (!url) throw new Error('No URL in edits response');
-  return url;
-}
-
 
   /**
    * Download image from URL and save to file system
@@ -445,8 +376,8 @@ private async callOpenAIImagesEdits(params: {
   public getApiInfo(): { provider: string; model: string; costPerImage: string } {
     return {
       provider: "OpenAI",
-      model: "DALL-E 3 (generations) + gpt-image-1 (edits)",
-      costPerImage: "$0.040 (1024x1024)" // ggf. anpassen, falls du andere Preise nutzt
+      model: "DALL-E 3",
+      costPerImage: "$0.040 (1024x1024)"
     };
   }
 }
