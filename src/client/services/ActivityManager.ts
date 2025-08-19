@@ -32,7 +32,7 @@ export class ActivityManager {
   private readonly COMMENT_INTERVAL_MS: number = 3 * 60 * 1000; // 3 minutes
   private readonly SAFETY_BUFFER_MS: number = 30 * 1000; // 30 seconds
 
-  constructor(isTestMode: boolean = true) {
+  constructor(isTestMode: boolean = false) {
     this.POST_INTERVAL_MS = isTestMode ? 5 * 60 * 1000 : 30 * 60 * 1000; // 5min test, 30min prod
     logger.info(`🎯 ActivityManager initialized - Post interval: ${this.POST_INTERVAL_MS / 60000} minutes`);
   }
@@ -123,21 +123,26 @@ export class ActivityManager {
   /**
    * Schedule recurring posts
    */
-  private scheduleRecurringPosts(): void {
-    // Initial post after 2 minutes
-    setTimeout(() => {
-      this.requestActivity(ActivityType.POSTING);
-    }, 2 * 60 * 1000);
-
-    // Regular interval posting
+private scheduleRecurringPosts(): void {
+  // Initial post after 2 minutes
+  setTimeout(() => {
+    logger.info("🎯 Triggering initial post after 2 minutes");
+    this.requestActivity(ActivityType.POSTING);
+    
+    // Start regular interval NACH dem ersten Post
     this.postingInterval = setInterval(() => {
+      logger.info(`⏰ Interval triggered - checking if can post...`);
       if (this.canExecuteActivity(ActivityType.POSTING)) {
+        logger.info("✅ Can post - requesting activity");
         this.requestActivity(ActivityType.POSTING);
       } else {
         logger.warn("⏰ Scheduled post skipped - system busy");
       }
     }, this.POST_INTERVAL_MS);
-  }
+    
+    logger.info(`📅 Next posts scheduled every ${this.POST_INTERVAL_MS / 60000} minutes`);
+  }, 2 * 60 * 1000);
+}
 
   /**
    * Execute activity immediately
