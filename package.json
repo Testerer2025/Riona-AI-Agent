@@ -15,6 +15,7 @@
   "license": "ISC",
   "description": "Riona-AI-Agent is an AI-powered automation tool designed to interact with various social media platforms.",
   "dependencies": {
+    "form-data": "^4.0.0",
     "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.9",
     "cookie-parser": "^1.4.7",
@@ -50,6 +51,7 @@
     "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
+    "@types/form-data": "^2.5.0",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/jsdom": "^21.1.7",
