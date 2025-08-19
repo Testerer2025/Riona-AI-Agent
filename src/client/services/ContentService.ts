@@ -82,45 +82,7 @@ public async generatePost(config?: Partial<ContentConfig>): Promise<GeneratedCon
   }
 }
 
-/**
- * Generate post with history context
- */
-public async generatePostWithHistory(historyContext: any): Promise<GeneratedContent> {
-  const finalConfig = { ...this.defaultConfig };
-  
-  // Add history context to config
-  if (historyContext) {
-    finalConfig.avoidKeywords = historyContext.avoid_words || [];
-    finalConfig.preferredTopics = historyContext.fresh_elements || [];
-  }
-  
-  try {
-    logger.info("🎨 Starting post generation with history context...");
-    
-    // Select theme as usual
-    const theme = this.configManager.selectWeightedTheme();
-    logger.info(`📋 Theme selected: "${theme.name}" (ID: ${theme.id})`);
-    
-    // Generate with history context
-    const content = await this.generateContentForTheme(theme, finalConfig);
-    logger.info(`✅ Post generated with history awareness: ${content.length} characters`);
-    
-    const contentHash = this.createContentHash(content);
-    const imageCategory = this.determineImageCategoryFromTheme(theme);
-    
-    return {
-      text: content,
-      postType: theme.id,
-      contentHash,
-      imageCategory,
-      theme
-    };
-    
-  } catch (error) {
-    logger.error("❌ Content generation with history failed:", error);
-    return this.getEmergencyContent();
-  }
-}
+
 
 
   /**

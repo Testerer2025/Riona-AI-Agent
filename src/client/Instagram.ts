@@ -433,124 +433,109 @@ private async ensureLoggedIn(): Promise<void> {
   /**
    * Generate unique post based on history analysis - RESTORED ORIGINAL INTELLIGENCE
    */
-  private async generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
-    try {
-      logger.info("🔍 Analysiere Post-Historie für intelligente Content-Generierung...");
-      
-      // 1. Lade die letzten Posts für umfassende Analyse
-      const recentPosts = await Post.find()
-        .sort({ posted_at: -1 })
-        .limit(25)
-        .select('content image_name posted_at post_type');
-      
-      logger.info(`📊 Gefunden: ${recentPosts.length} Posts für Analyse`);
-      
-      if (recentPosts.length < 3) {
-        logger.info("📝 Wenige Posts vorhanden - verwende vereinfachte Generierung");
-        return await this.generateSimplePost();
-      }
-      
-      // 2. ORIGINAL: AI-basierte Analyse mit detaillierten Prompts
-      const analysisPrompt = `
-      Du bist ein Content-Strategieexperte. Analysiere diese ${recentPosts.length} vorherigen Posts und erstelle Guidelines für einen neuen, einzigartigen Post.
-
-      VORHERIGE POSTS:
-      ${recentPosts.map((post: any, index: number) => {
-        const daysAgo = Math.ceil((Date.now() - post.posted_at.getTime()) / (1000 * 60 * 60 * 24));
-        return `Post ${index + 1} (vor ${daysAgo} Tagen): "${post.content}"`;
-      }).join('\n\n')}
-
-      AUFGABE: Analysiere diese Posts und identifiziere:
-      
-      1. **Überstrapazierte Themen** (was wurde zu oft behandelt?)
-      2. **Überstrapazierte Strukturen** (gleiche Aufbau-Muster?)
-      3. **Überstrapazierte Wörter/Phrasen** (welche Begriffe kommen zu häufig vor?)
-      4. **Überstrapazierte Emojis** (welche werden übermäßig verwendet?)
-      5. **Zeitliche Lücken** (welche Themen wurden lange nicht behandelt?)
-      6. **Stilistische Monotonie** (zu ähnlicher Tonfall?)
-
-      Gib mir dann KONKRETE EMPFEHLUNGEN für einen neuen Post, der:
-      - Ein UNTERREPRÄSENTIERTES Thema behandelt
-      - Eine ANDERE Struktur/Format hat
-      - FRISCHE Begriffe und Emojis verwendet
-      - Einen VARIIERENDEN Tonfall hat
-
-      Antworte in diesem Format:
-      {
-        "avoid_themes": ["Thema 1", "Thema 2"],
-        "avoid_structures": ["Struktur 1", "Struktur 2"],
-        "avoid_words": ["Wort 1", "Wort 2"],
-        "avoid_emojis": ["🚀", "💡"],
-        "recommended_theme": "Konkretes neues Thema",
-        "recommended_structure": "Neue Post-Struktur",
-        "recommended_tone": "Gewünschter Tonfall",
-        "fresh_elements": ["Element 1", "Element 2"]
-      }
-      `;
-
-      logger.info("🤖 Führe intelligente Post-Historie-Analyse durch...");
-      const analysisResponse = await runAgent(null as any, analysisPrompt);
-      
-      // 3. Parse Analysis
-      let guidelines: any;
-      try {
-        const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          guidelines = JSON.parse(jsonMatch[0]);
-          logger.info("✅ Post-Analyse erfolgreich geparst");
-          logger.info(`📋 Zu vermeiden: ${guidelines.avoid_themes?.join(', ')}`);
-          logger.info(`🎯 Empfohlenes Thema: ${guidelines.recommended_theme}`);
-        } else {
-          throw new Error("Keine Guidelines-JSON gefunden");
-        }
-      } catch (parseError) {
-        logger.warn("⚠️ Guidelines-Parsing fehlgeschlagen, verwende Basis-Empfehlungen");
-        guidelines = {
-          avoid_themes: ["Brainstorming", "Agenturleben"],
-          recommended_theme: "Kundengeschichten oder Branchentrends",
-          recommended_structure: "Frage-Antwort Format oder Storytelling",
-          recommended_tone: "Authentisch und persönlich"
-        };
-      }
-
-    // NEU - ContentService mit Historie-Kontext nutzen
-    const historyContext = {
-      avoid_themes: guidelines.avoid_themes,
-      avoid_words: guidelines.avoid_words,
-      avoid_emojis: guidelines.avoid_emojis,
-      recommended_theme: guidelines.recommended_theme,
-      fresh_elements: guidelines.fresh_elements
-    };
-
-    const generatedContent = await this.contentService.generatePostWithHistory(historyContext);
-    const postContent = generatedContent.text;
-    const selectedTheme = generatedContent.theme
-
-
-      // 5. Generate AI image based on actual content
-      logger.info("🤖 Generating AI image based on analyzed post content...");
-      const imagePath = await this.imageManager.getImageForContent(postContent, selectedTheme);
-
-      // 6. Final Check - exakte Duplikate
-      const contentHash = require('crypto').createHash('md5').update(postContent).digest('hex');
-      const exactDuplicate = await Post.findOne({ content_hash: contentHash });
-      
-      if (exactDuplicate) {
-        logger.warn("❌ Trotz intelligenter Analyse wurde exakter Duplikat generiert - verwende Fallback");
-        return await this.generateSimplePost();
-      }
-
-      logger.info("✅ Intelligenter, auf AI-Analyse basierter Post generiert");
-      logger.info(`📝 Neuer Post (${postContent.length} Zeichen): "${postContent.substring(0, 100)}..."`);
-      
-      return { content: postContent, imagePath };
-
-    } catch (error) {
-      logger.error("❌ Intelligente Post-Generierung fehlgeschlagen:", error);
+private async generateUniquePostBasedOnHistory(): Promise<{content: string, imagePath: string}> {
+  try {
+    logger.info("🔍 Analysiere Post-Historie für intelligente Content-Generierung...");
+    
+    // 1. ERST Theme wählen
+    const selectedTheme = this.configManager.selectWeightedTheme();
+    logger.info(`📋 Theme gewählt: ${selectedTheme.name} (${selectedTheme.id})`);
+    
+    // 2. Lade die letzten Posts für Analyse
+    const recentPosts = await Post.find()
+      .sort({ posted_at: -1 })
+      .limit(25)
+      .select('content posted_at');
+    
+    logger.info(`📊 Gefunden: ${recentPosts.length} Posts für Analyse`);
+    
+    if (recentPosts.length < 3) {
+      logger.info("📝 Wenige Posts vorhanden - verwende vereinfachte Generierung");
       return await this.generateSimplePost();
     }
+    
+    // 3. Analysiere was zu VERMEIDEN ist (aus ALLEN Posts)
+    const analysisPrompt = `
+    Analysiere diese ${recentPosts.length} letzten Posts und identifiziere was NICHT wiederholt werden soll:
+
+    BISHERIGE POSTS:
+    ${recentPosts.map((post: any, index: number) => `${index + 1}. ${post.content}`).join('\n\n')}
+
+    AUFGABE:
+    Identifiziere KONKRETE Themen/Inhalte die in den Posts vorkommen und NICHT wiederholt werden sollten.
+    
+    Gib eine JSON-Antwort:
+    {
+      "avoid_topics": ["Konkrete Themen die vorkamen", "z.B. Kampagnen-Fails", "Teammeeting-Stories"],
+      "avoid_keywords": ["Spezifische Begriffe", "Die zu oft verwendet wurden"],
+      "content_patterns": ["Inhaltsmuster die sich wiederholen", "z.B. Umfrage-Ergebnisse"]
+    }
+    `;
+
+    logger.info("🤖 Analysiere was vermieden werden soll...");
+    const analysisResponse = await runAgent(null as any, analysisPrompt);
+    
+    let avoidanceList: any;
+    try {
+      const responseText = typeof analysisResponse === 'string' ? analysisResponse : JSON.stringify(analysisResponse);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        avoidanceList = JSON.parse(jsonMatch[0]);
+        logger.info("✅ Analyse erfolgreich");
+        logger.info(`🚫 Zu vermeiden: ${avoidanceList.avoid_topics?.slice(0, 3).join(', ')}...`);
+      }
+    } catch (parseError) {
+      logger.warn("⚠️ Analyse-Parsing fehlgeschlagen, verwende Defaults");
+      avoidanceList = { avoid_topics: [], avoid_keywords: [] };
+    }
+
+    // 4. Generiere Post mit Theme + Ausschlüssen
+    const themePrompt = this.configManager.loadPromptFromFile(selectedTheme) || selectedTheme.prompt;
+    
+    const finalPrompt = `
+    ${this.configManager.buildCharacterContext()}
+    
+    THEME: ${selectedTheme.name}
+    ${themePrompt}
+    
+    WICHTIG - Diese Inhalte NICHT verwenden (wurden kürzlich gepostet):
+    - Vermeide diese Themen: ${avoidanceList.avoid_topics?.join(', ') || 'keine'}
+    - Vermeide diese Wörter: ${avoidanceList.avoid_keywords?.join(', ') || 'keine'}
+    - Vermeide diese Muster: ${avoidanceList.content_patterns?.join(', ') || 'keine'}
+    
+    Erstelle einen FRISCHEN ${selectedTheme.name} Post der diese Inhalte NICHT wiederholt.
+    
+    Gib NUR den Post-Text zurück.
+    `;
+
+    logger.info(`🎨 Generiere ${selectedTheme.name} mit Ausschluss bisheriger Inhalte...`);
+    const postResponse = await runAgent(null as any, finalPrompt);
+    const postContent = this.parseAIResponse(postResponse);
+
+    // 5. Generate image based on theme config
+    logger.info("🤖 Generating AI image based on theme configuration...");
+    const imagePath = await this.imageManager.getImageForContent(postContent, selectedTheme);
+
+    // 6. Final duplicate check
+    const contentHash = require('crypto').createHash('md5').update(postContent).digest('hex');
+    const exactDuplicate = await Post.findOne({ content_hash: contentHash });
+    
+    if (exactDuplicate) {
+      logger.warn("❌ Exakter Duplikat trotz Analyse - verwende Fallback");
+      return await this.generateSimplePost();
+    }
+
+    logger.info("✅ Intelligenter Post mit Historie-Ausschlüssen generiert");
+    logger.info(`📝 Theme: ${selectedTheme.name}`);
+    logger.info(`📝 Post (${postContent.length} Zeichen): "${postContent.substring(0, 100)}..."`);
+    
+    return { content: postContent, imagePath };
+
+  } catch (error) {
+    logger.error("❌ Intelligente Post-Generierung fehlgeschlagen:", error);
+    return await this.generateSimplePost();
   }
+}
 
   /**
    * Generate simple post as fallback
