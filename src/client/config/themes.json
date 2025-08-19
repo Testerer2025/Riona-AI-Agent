@@ -27,9 +27,22 @@
         "size": "1024x1024",
         "quality": "standard"
       }
+    },
+    {
+      "id": "weather_post",
+      "name": "Wetter Post",
+      "enabled": true,
+      "weight": 6,
+      "promptFile": "weather_post.txt",
+      "image": {
+        "prompt": "Ein  Himmel über Dübendorf, der entsprechend des folgenden Textes aussieht.",
+        "apiStyle": "natural",
+        "details": "Schöne Himmelaufnahme, sanfte Farben, entspannte Atmosphäre",
+        "size": "1024x1024",
+        "quality": "standard"
+      }
     }
   ],
-  
   "defaults": {
     "maxLength": 450,
     "includeHashtags": true,
