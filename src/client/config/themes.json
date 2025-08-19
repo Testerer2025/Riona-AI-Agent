@@ -1,43 +1,29 @@
 {
   "themes": [
     {
-      "id": "agency_showcase",
-      "name": "Agentur Showcase",
-      "enabled": false,
+      "id": "bar_showcase",
+      "name": "Bar Showcase",
+      "enabled": true,
       "weight": 3,
-      "promptFile": "agency_showcase.txt",
+      "promptFile": "bar_showcase.txt",
       "image": {
-        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
+        "prompt": "Stillleben von Objekten in einer Bar, keine Personen oder Schriften",
         "apiStyle": "natural",
-        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
+        "details": "Gläser, Dartscheiben, Cocktails, warme Beleuchtung",
         "size": "1024x1024",
         "quality": "standard"
       }
     },
     {
-      "id": "friday_post",
-      "name": "Friday Post",
+      "id": "terrace_post",
+      "name": "Terrassen Post",
       "enabled": true,
       "weight": 3,
-      "promptFile": "friday_post.txt",
+      "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
+        "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks",
         "apiStyle": "natural",
-        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
-        "size": "1024x1024",
-        "quality": "standard"
-      }
-    },
-    {
-      "id": "winter_post",
-      "name": "Winter Post",
-      "enabled": true,
-      "weight": 3,
-      "promptFile": "winter_post.txt",
-      "image": {
-        "prompt": "Professional marketing team in modern office discussing strategy on whiteboards",
-        "apiStyle": "natural",
-        "details": "bright lighting, clean workspace, laptops visible, collaborative atmosphere",
+        "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen",
         "size": "1024x1024",
         "quality": "standard"
       }
@@ -50,10 +36,9 @@
     "hashtagCount": 3,
     "language": "de"
   },
-  
   "backupPosts": [
-    "🎯 Authentizität schlägt Perfektion. Jeden Tag.\n\nWas ist euer authentischster Marketing-Moment gewesen?\n\n#authentizität #realmarketing #storytelling",
-    "⚡ Die besten Kampagnen entstehen oft aus 'gescheiterten' Ideen.\n\nWelche eurer verworfenen Ideen hätte vielleicht doch funktioniert?\n\n#kreativität #ideenfindung #innovation",
-    "🚀 Kleine Teams, große Wirkung: Manchmal ist weniger wirklich mehr.\n\nWas ist euer bestes Beispiel für effiziente Teamarbeit?\n\n#teamwork #effizienz #erfolg"
+    "🎯 Nichts geht über eine spannende Partie Darts!\n\nWer ist dein liebster Dart-Partner?\n\n#darts #dübi #barpapa",
+    "☀️ Unsere Terrasse ist offiziell eröffnet! Schnapp dir deinen Lieblingsdrink und geniess die Sonne.\n\nWer kommt heute Abend vorbei?\n\n#terrasse #dübi #sommerabend",
+    "🍻 Feierabend im PAPA: Komm vorbei und lass den Tag ausklingen. Die Drinks sind kalt und die Stimmung ist super.\n\n#feierabend #barleben #dübi"
   ]
 }
