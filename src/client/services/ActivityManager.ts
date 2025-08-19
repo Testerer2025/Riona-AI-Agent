@@ -32,7 +32,7 @@ export class ActivityManager {
   private readonly COMMENT_INTERVAL_MS: number = 3 * 60 * 1000; // 3 minutes
   private readonly SAFETY_BUFFER_MS: number = 30 * 1000; // 30 seconds
 
-  constructor(isTestMode: boolean = false) {
+  constructor(isTestMode: boolean = true) {
     this.POST_INTERVAL_MS = isTestMode ? 5 * 60 * 1000 : 30 * 60 * 1000; // 5min test, 30min prod
     logger.info(`🎯 ActivityManager initialized - Post interval: ${this.POST_INTERVAL_MS / 60000} minutes`);
   }
