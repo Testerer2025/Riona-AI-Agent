@@ -32,7 +32,7 @@
       "id": "weather_post",
       "name": "Wetter Post",
       "enabled": true,
-      "weight": 3,
+      "weight": 9,
       "promptFile": "weather_post.txt",
       "image": {
         "prompt": "Ein  Himmel über Dübendorf, der entsprechend des folgenden Textes aussieht.",
