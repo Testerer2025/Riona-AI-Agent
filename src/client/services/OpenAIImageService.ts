@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../../config/logger';
+import Replicate from 'replicate';
 
 export interface OpenAIImageRequest {
   prompt: string;
@@ -72,6 +73,61 @@ export class OpenAIImageService {
 }
 
 
+/**
+ * Generate image with Replicate using reference images
+ */
+private async generateWithReplicate(prompt: string, referenceImagePath: string, strength: number = 0.7): Promise<string> {
+  try {
+    logger.info(`🎨 Generating with Replicate, reference strength: ${strength}`);
+    
+    // Initialize Replicate
+    const replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
+    
+    // Read reference image as base64
+    const imageBuffer = fs.readFileSync(referenceImagePath);
+    const base64Image = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
+    
+    // Use SDXL img2img
+    const output = await replicate.run(
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      {
+        input: {
+          prompt: prompt,
+          negative_prompt: "ugly, distorted, blurry, low quality",
+          image: base64Image,
+          strength: strength,  // 0.1 = sehr nah am Original, 0.9 = sehr kreativ
+          num_inference_steps: 30,
+          guidance_scale: 7.5,
+          scheduler: "K_EULER",
+          num_outputs: 1,
+          width: 1024,
+          height: 1024
+        }
+      }
+    ) as string[];
+    
+    if (!output || output.length === 0) {
+      throw new Error('No output from Replicate');
+    }
+    
+    // Download and save the generated image
+    const imageUrl = output[0];
+    const timestamp = Date.now();
+    const filename = `replicate_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
+    const imagePath = await this.downloadAndSaveImage(imageUrl, 'replicate', filename);
+    
+    return imagePath;
+    
+  } catch (error) {
+    logger.error("❌ Replicate generation failed:", error);
+    throw error;
+  }
+}
+
+
+
 
 /**
  * Generate image for a specific theme with custom settings
@@ -81,21 +137,52 @@ public async generateImageForTheme(theme: any, postContent: string): Promise<str
   try {
     logger.info(`🎨 Generating theme-based image for: ${theme.name}`);
     
-    // Create prompt based on theme configuration
-    const imagePrompt = this.createThemeImagePrompt(theme, postContent);
+    // Check for reference images and Replicate token
+    if (theme.image?.referenceImages && 
+        theme.image.referenceImages.length > 0 && 
+        process.env.REPLICATE_API_TOKEN) {
+      
+      // Build path to reference image
+      const refImagePath = path.join(
+        path.resolve('assets', 'references'), 
+        theme.image.referenceImages[0]
+      );
+      
+      // Check if reference image exists
+      if (fs.existsSync(refImagePath)) {
+        logger.info(`📸 Found reference image: ${theme.image.referenceImages[0]}`);
+        
+        try {
+          // Try Replicate with reference image
+          const prompt = this.createThemeImagePrompt(theme, postContent);
+          const strength = theme.image.referenceStrength || 0.7;
+          
+          const replicateImage = await this.generateWithReplicate(
+            prompt,
+            refImagePath,
+            strength
+          );
+          
+          logger.info(`✅ Successfully generated with Replicate using reference`);
+          return replicateImage;
+          
+        } catch (replicateError) {
+          logger.error("❌ Replicate failed, falling back to DALL-E:", replicateError);
+          // Fall through to DALL-E
+        }
+      } else {
+        logger.warn(`⚠️ Reference image not found: ${refImagePath}`);
+      }
+    }
     
-    // Use theme settings or defaults
+    // Default to DALL-E generation (no reference images or Replicate failed)
+    logger.info(`🎨 Using DALL-E 3 (no reference images or fallback)`);
+    
+    const imagePrompt = this.createThemeImagePrompt(theme, postContent);
     const apiStyle = theme.image?.apiStyle || 'natural';
     const size = theme.image?.size || '1024x1024';
     const quality = theme.image?.quality || 'standard';
     
-    logger.info(`🎨 Using settings - Style: ${apiStyle}, Size: ${size}, Quality: ${quality}`);
-    
-    // Generate filename
-    const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const category = theme.id.replace('_', '-');
-    
-    // Call API with theme settings
     const imageUrl = await this.callOpenAIImagesAPIWithSettings(
       imagePrompt,
       apiStyle,
@@ -103,13 +190,14 @@ public async generateImageForTheme(theme: any, postContent: string): Promise<str
       quality
     );
     
-    // Download and save
+    const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const category = theme.id.replace('_', '-');
     const imagePath = await this.downloadAndSaveImage(imageUrl, category, filename);
+    
     return imagePath;
     
   } catch (error) {
     logger.error(`❌ Theme-based image generation failed for ${theme.id}:`, error);
-    // Fallback to content-based generation
     return this.generateImageFromContent(postContent, 'default');
   }
 }
