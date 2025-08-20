@@ -26,7 +26,8 @@
         "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen. Nutze für das Aussehen der Terasse, den Stil der mitgesendeten Referenzbilder.",
         "size": "1024x1024",
         "quality": "standard",
-        "referenceImages": ["barterrasse.jpg"]
+        "referenceImages": ["barterrasse.jpg"], 
+        "referenceStrength": 0.4  
       }
     },
     {
