@@ -27,7 +27,7 @@
         "size": "1024x1024",
         "quality": "standard",
         "referenceImages": ["barterrasse.jpg"], 
-        "referenceStrength": 0.5 
+        "referenceStrength": 1 
       }
     },
     {
