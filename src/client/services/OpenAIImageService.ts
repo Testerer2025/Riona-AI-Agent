@@ -97,7 +97,7 @@ private async generateWithReplicate(prompt: string, referenceImagePath: string, 
           prompt: prompt,
           negative_prompt: "ugly, distorted, blurry, low quality",
           image: base64Image,
-          strength: strength,  // 0.1 = sehr nah am Original, 0.9 = sehr kreativ
+          prompt_strength: 1 - strength,  
           num_inference_steps: 30,
           guidance_scale: 7.5,
           scheduler: "K_EULER",
