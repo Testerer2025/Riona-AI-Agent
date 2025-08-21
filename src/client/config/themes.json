@@ -4,7 +4,7 @@
       "id": "bar_showcase",
       "name": "Bar Showcase",
       "enabled": true,
-      "weight": 2,
+      "weight": 1,
       "promptFile": "bar_showcase.txt",
       "image": {
         "prompt": "Stillleben von Objekten in einer Bar, keine Personen oder Schriften",
@@ -18,7 +18,7 @@
       "id": "terrace_post",
       "name": "Terrassen Post",
       "enabled": true,
-      "weight": 12,
+      "weight": 100,
       "promptFile": "terrace_post.txt",
       "image": {
         "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks",
@@ -34,7 +34,7 @@
       "id": "weather_post",
       "name": "Wetter Post",
       "enabled": true,
-      "weight": 2,
+      "weight": 1,
       "promptFile": "weather_post.txt",
       "image": {
         "prompt": "Ein  Himmel über Dübendorf, der entsprechend des folgenden Textes aussieht.",
