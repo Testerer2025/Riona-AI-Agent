@@ -21,13 +21,13 @@
       "weight": 1000,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Referenzterrasse beibehalten: Architektur, Möbel, Materialien und Farbwelt exakt übernehmen. Szene mit entspannten Gästen an den Tischen: sitzend, sich unterhaltend, einige lachen, Gläser/Drinks auf den Tischen. Gesamtbild ruhig, glaubwürdig, ohne Text, ohne Logos, ohne Menütafeln. Hohe Detailtreue, saubere Kanten, natürliche Beleuchtung, realistische Proportionen.",
+        "prompt": "Nutze das Referenzfoto als Vorlage. Erhalte Terrasse, Perspektive, Möbel, Materialien, Farben und Meerblick unverändert. Ergänze 10–14 Gäste, verteilt an den Tischen: Paare und kleine Gruppen, sitzend und plaudernd, anstoßend, Drinks & kleine Snacks auf den Tischen. Lockere Sommerkleidung, natürliche Posen, realistische Proportionen. Fotorealistisch, weiches Tageslicht, natürliche Hauttöne. Keine Schrift/Logos",
         "apiStyle": "natural",
         "details": "geringe Tiefenschärfe, weiches Bokeh",
         "size": "1024x1024",
         "quality": "standard",
         "referenceImages": ["meer.jpg"], 
-        "referenceStrength": 0.2,
+        "referenceStrength": 0.4,
         "usePostingText": false 
       }
     },
