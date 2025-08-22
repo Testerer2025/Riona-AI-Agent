@@ -615,40 +615,14 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
         }
       }
       
-      return this.getBackupPost();
+      return this.configManager.getRandomBackupPost();
       
     } catch (error) {
       console.error("Parse Error:", error);
-      return this.getBackupPost();
+      return this.configManager.getRandomBackupPost();
     }
   }
 
-  /**
-   * Get backup post - RESTORED ORIGINAL
-   */
-  private getBackupPost(): string {
-    const backupPosts = [
-      `🎯 Authentizität schlägt Perfektion. Jeden Tag.
-
-  Was ist euer authentischster Marketing-Moment gewesen?
-
-  #authentizität #realmarketing #storytelling #community`,
-
-      `⚡ Plot Twist: Die besten Kampagnen entstehen oft aus "gescheiterten" Ideen.
-
-  Welche eurer verworfenen Ideen hätte vielleicht doch funktioniert?
-
-  #kreativität #ideenfindung #kampagnenentwicklung #innovation`,
-
-      `🚀 Kleine Teams, große Wirkung: Manchmal ist weniger wirklich mehr.
-
-  Was ist euer bestes Beispiel für effiziente Teamarbeit?
-
-  #teamwork #effizienz #kleinesteams #grossewirkung`
-    ];
-    
-    return backupPosts[Math.floor(Math.random() * backupPosts.length)];
-  }
 
   /**
    * Check for basic duplicates

@@ -269,12 +269,6 @@ public selectWeightedThemeWithHistory(recentThemes: string[]): ThemeConfig {
     return this.config.defaults;
   }
 
-  /**
-   * Get backup posts
-   */
-  public getBackupPosts(): string[] {
-    return this.config.backupPosts;
-  }
 
   /**
    * Get random backup post
@@ -346,11 +340,11 @@ public selectWeightedThemeWithHistory(recentThemes: string[]): ThemeConfig {
       themes: [
         {
           id: "fallback",
-          name: "Fallback Theme",
+          name: "Fallback Theme", 
           enabled: true,
           weight: 1,
-          prompt: "Erstelle einen Instagram Post für eine Social Media Agentur. Max 450 Zeichen, Deutsch.",
-          imageKeywords: ["business", "social media"]
+          prompt: "Erstelle einen freundlichen Social Media Post.",
+          imageKeywords: ["social"]
         }
       ],
       defaults: {
@@ -360,7 +354,7 @@ public selectWeightedThemeWithHistory(recentThemes: string[]): ThemeConfig {
         language: "de"
       },
       backupPosts: [
-        "🚀 Innovation durch Kreativität.\n\n#marketing #socialmedia #innovation"
+        "☀️ Was für ein schöner Tag! Kommt vorbei! #goodvibes"  // NUR EINER!
       ]
     };
   }
