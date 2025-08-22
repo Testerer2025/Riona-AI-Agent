@@ -23,10 +23,10 @@
       "image": {
         "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks",
         "apiStyle": "natural",
-        "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen. Nutze für das Aussehen der Terasse, den Stil der mitgesendeten Referenzbilder.",
+        "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen. Nutze für das das mitgelieferte Referenzbild als Vorlage und befülle die Terrasse mit Menschen.",
         "size": "1024x1024",
         "quality": "standard",
-        "referenceImages": ["barterrasse.jpg"], 
+        "referenceImages": ["meer.jpg"], 
         "referenceStrength": 0.5 
       }
     },
