@@ -21,7 +21,7 @@
       "weight": 1000,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Nutze das Referenzfoto als Vorlage. Erhalte Terrasse, Perspektive, Möbel, Materialien, Farben und Meerblick unverändert. Ergänze 10–14 Gäste, verteilt an den Tischen: Paare und kleine Gruppen, sitzend und plaudernd, anstoßend, Drinks & kleine Snacks auf den Tischen. Lockere Sommerkleidung, natürliche Posen, realistische Proportionen. Fotorealistisch, weiches Tageslicht, natürliche Hauttöne. Keine Schrift/Logos",
+        "prompt": "Nutze das Referenzfoto als Vorlage. Erhalte Terrasse, Perspektive, Möbel, Materialien, Farben und Meerblick unverändert. Ergänze 10 bis 14 Gäste, verteilt an den Tischen: Paare und kleine Gruppen, sitzend und plaudernd, anstoßend, Drinks & kleine Snacks auf den Tischen. Lockere Sommerkleidung, natürliche Posen, realistische Proportionen. Fotorealistisch, weiches Tageslicht, natürliche Hauttöne. Keine Schrift/Logos",
         "apiStyle": "natural",
         "details": "geringe Tiefenschärfe, weiches Bokeh",
         "size": "1024x1024",
