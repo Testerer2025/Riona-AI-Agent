@@ -21,9 +21,9 @@
       "weight": 1000,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "sitzen.",
+        "prompt": "Referenzterrasse beibehalten: Architektur, Möbel, Materialien und Farbwelt exakt übernehmen. Szene mit entspannten Gästen an den Tischen: sitzend, sich unterhaltend, einige lachen, Gläser/Drinks auf den Tischen. Gesamtbild ruhig, glaubwürdig, ohne Text, ohne Logos, ohne Menütafeln. Hohe Detailtreue, saubere Kanten, natürliche Beleuchtung, realistische Proportionen.",
         "apiStyle": "natural",
-        "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
+        "details": "geringe Tiefenschärfe, weiches Bokeh",
         "size": "1024x1024",
         "quality": "standard",
         "referenceImages": ["meer.jpg"], 
