@@ -207,6 +207,7 @@ public async generateImageForTheme(theme: any, postContent: string): Promise<str
  * NEW METHOD - Add after generateImageForTheme
  */
 private createThemeImagePrompt(theme: any, postContent: string): string {
+  const allowContext = theme.image?.usePostingText !== false;
   if (theme.image?.prompt) {
     // Clean post content for context
     const cleanContent = postContent
@@ -223,7 +224,7 @@ private createThemeImagePrompt(theme: any, postContent: string): string {
       fullPrompt += `. ${theme.image.details}`;
     }
     
-    if (cleanContent) {
+    if (cleanContent && allowContext) {
       fullPrompt += `. Context: ${cleanContent}`;
     }
     
