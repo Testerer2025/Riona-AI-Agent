@@ -663,75 +663,86 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
   /**
    * Click create button (+ icon)
    */
-  // REPLACE the whole method
-private async clickCreateButton(page: Page): Promise<void> {
-  // 1) Exakt den Sidebar-Eintrag "Erstellen" treffen (Icon: aria-label="Neuer Beitrag")
-  const candidates = [
-    'a[role="link"]:has(svg[aria-label="Neuer Beitrag"])',
-    'a[role="link"]:has(svg[aria-label*="New post"])',
-    // Fallbacks, falls IG mal wieder Label ändert:
-    'div[role="button"]:has(svg[aria-label*="Neuer Beitrag"])',
-    'div[role="button"]:has(svg[aria-label*="New post"])',
-  ];
-
+  private async clickCreateButton(page: Page): Promise<void> {
+  // 1) Plus/Erstellen klicken – ohne :has()-Abhängigkeit
   let clicked = false;
-  for (const sel of candidates) {
-    try {
-      const el = await page.waitForSelector(sel, { timeout: 12_000 });
-      if (el) {
-        await el.click({ delay: 40 });
-        logger.info(`Plus-Icon gefunden mit Selektor: ${sel}`);
-        clicked = true;
-        break;
+  try {
+    // Versuche zuerst direkt per aria-label auf dem SVG (Deutsch/Englisch)
+    await page.waitForSelector('svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]', { timeout: 12000 });
+    await page.evaluate(() => {
+      const icon = document.querySelector('svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]');
+      if (!icon) return;
+      // Nächstes klickbares Elternelement finden (Link oder Button)
+      let el: HTMLElement | null = icon as HTMLElement;
+      while (el && !(el instanceof HTMLAnchorElement || el.getAttribute('role') === 'button')) {
+        el = el.parentElement;
       }
-    } catch {}
-  }
-  if (!clicked) throw new Error("Erstellen-Button nicht gefunden");
+      (el as HTMLElement)?.click();
+    });
+    clicked = true;
+  } catch {}
 
-  // 2) Einige UIs zeigen danach ein Untermenü → explizit "Beitrag" anklicken (DE/EN)
-  const submenuXPaths = [
-    '//div[@role="menu"]//div[.//text()[contains(., "Beitrag")]]',
-    '//div[@role="menu"]//div[.//text()[contains(., "Post")]]',
-    '//div[@role="dialog"]//div[.//text()[contains(., "Beitrag")]]',
-    '//div[@role="dialog"]//div[.//text()[contains(., "Post")]]',
-  ];
-  for (const xp of submenuXPaths) {
-    const [node] = await page.$x(xp);
-    if (node) {
-      await node.click({ delay: 40 });
-      logger.info("Untermenü: 'Beitrag' angeklickt");
-      break;
+  if (!clicked) {
+    // Fallback: erster sichtbarer „Erstellen“-Eintrag mit Plus-Icon
+    const alt = await page.$('a[role="link"], div[role="button"]');
+    if (!alt) throw new Error('Erstellen-Button nicht gefunden');
+    await (alt as any).click({ delay: 40 });
+  }
+
+  // 2) Falls ein Untermenü aufgeht → „Beitrag“/„Post“ klicken (textbasiert)
+  await new Promise(res => setTimeout(res, 300));
+  await page.evaluate(() => {
+    const roots = Array.from(document.querySelectorAll('div[role="menu"], div[role="dialog"]'));
+    const isVisible = (el: HTMLElement) => {
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
+    };
+    for (const root of roots) {
+      const items = root.querySelectorAll<HTMLElement>('button, [role="button"], a[role="menuitem"], div[role="menuitem"]');
+      for (const el of items) {
+        if (!isVisible(el)) continue;
+        const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+        if (t.includes('beitrag') || t.includes('post')) {
+          el.click();
+          return;
+        }
+      }
     }
-  }
+  });
 
-  // 3) Auf das Overlay warten (genau das, was du geschickt hast)
-  await page.waitForSelector('div[role="dialog"][aria-label="Neuen Beitrag erstellen"]', { timeout: 60_000 });
+  // 3) Auf das Overlay warten (genau das aus deinem Dump)
+  await page.waitForSelector('div[role="dialog"][aria-label="Neuen Beitrag erstellen"]', { timeout: 60000 });
 }
+
 
 
   /**
    * Upload image file
    */
-  // REPLACE the whole method
 private async uploadImage(page: Page, imagePath: string): Promise<void> {
   try {
-    // 1) Optionalen Button "Vom Computer auswählen" (oder EN) klicken
-    const pickBtnXPs = [
-      '//div[@role="dialog"]//button[normalize-space()="Vom Computer auswählen"]',
-      '//div[@role="dialog"]//button[normalize-space()="Select from computer"]',
-      '//div[@role="dialog"]//button[contains(normalize-space(), "Computer")]',
-    ];
-    for (const xp of pickBtnXPs) {
-      const [btn] = await page.$x(xp);
-      if (btn) {
-        await btn.click({ delay: 40 });
-        await new Promise(res => setTimeout(res, 300));
-        logger.info("Klick: 'Vom Computer auswählen'");
-        break;
+    // Optional: „Vom Computer auswählen“ / „Select from computer“
+    await page.evaluate(() => {
+      const root = document.querySelector('div[role="dialog"]') || document;
+      const isVisible = (el: HTMLElement) => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
+      };
+      const btns = root!.querySelectorAll<HTMLElement>('button, [role="button"]');
+      for (const el of btns) {
+        if (!isVisible(el)) continue;
+        const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+        if (t.includes('vom computer auswählen') || t.includes('select from computer') || t.includes('computer')) {
+          el.click();
+          return;
+        }
       }
-    }
+    });
 
-    // 2) Den (oft versteckten) File-Input im Dialog finden – NICHT auf visible bestehen!
+    // kleine Render-Pause
+    await new Promise(res => setTimeout(res, 300));
+
+    // File-Input im Dialog finden (sichtbar ist egal – IG versteckt ihn oft)
     const inputHandle =
       await page.$('div[role="dialog"] form[role="presentation"] input[type="file"]') ||
       await page.$('div[role="dialog"] input[type="file"]') ||
@@ -741,12 +752,12 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       throw new Error('File-Input nicht gefunden (UI geändert?)');
     }
 
-    // 3) accept-Attribut kann stören → clientseitig entfernen (optional)
+    // accept entfernen (falls IG zu restriktiv ist)
     try {
       await page.evaluate((el: HTMLInputElement) => el.removeAttribute('accept'), inputHandle);
     } catch {}
 
-    // 4) Datei setzen – funktioniert auch bei unsichtbarem Input
+    // Datei setzen (funktioniert auch wenn Input unsichtbar ist)
     // @ts-ignore
     if (typeof inputHandle.setInputFiles === 'function') {
       // @ts-ignore
@@ -756,17 +767,16 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       await inputHandle.uploadFile(imagePath);
     }
 
-    logger.info("Bild erfolgreich hochgeladen");
-    await new Promise(res => setTimeout(res, 3000));
-
-    // 5) Auf nächste UI-Phase warten (Crop/Weiter etc.)
-    await page.waitForSelector('div[role="dialog"] [role="button"]', { timeout: 60_000 });
+    // kurze Pause, dann auf die nächste Phase (Crop/Weiter) warten
+    await new Promise(res => setTimeout(res, 800));
+    await page.waitForSelector('div[role="dialog"] [role="button"]', { timeout: 60000 });
 
   } catch (error) {
-    logger.error("Fehler beim Datei-Upload:", error);
+    logger.error('Fehler beim Datei-Upload:', error);
     throw error;
   }
 }
+
 
 
   /**
