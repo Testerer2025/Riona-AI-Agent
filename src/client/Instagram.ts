@@ -664,54 +664,63 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
    * Click create button (+ icon)
    */
   private async clickCreateButton(page: Page): Promise<void> {
-  // 1) Plus/Erstellen klicken – ohne :has()-Abhängigkeit
-  let clicked = false;
-  try {
-    // Versuche zuerst direkt per aria-label auf dem SVG (Deutsch/Englisch)
-    await page.waitForSelector('svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]', { timeout: 12000 });
-    await page.evaluate(() => {
-      const icon = document.querySelector('svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]');
-      if (!icon) return;
-      // Nächstes klickbares Elternelement finden (Link oder Button)
-      let el: HTMLElement | null = icon as HTMLElement;
-      while (el && !(el instanceof HTMLAnchorElement || el.getAttribute('role') === 'button')) {
-        el = el.parentElement;
-      }
-      (el as HTMLElement)?.click();
-    });
-    clicked = true;
-  } catch {}
+// 1) Plus-Icon (Erstellen) klicken – DE/EN
+const iconSel = 'svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]';
+const icon = await page.waitForSelector(iconSel, { timeout: 15000 });
+if (!icon) throw new Error('Erstellen-Icon nicht gefunden');
 
-  if (!clicked) {
-    // Fallback: erster sichtbarer „Erstellen“-Eintrag mit Plus-Icon
-    const alt = await page.$('a[role="link"], div[role="button"]');
-    if (!alt) throw new Error('Erstellen-Button nicht gefunden');
-    await (alt as any).click({ delay: 40 });
+// klickbaren Parent (Link/Role=button) triggern
+await page.evaluate((sel) => {
+  const svg = document.querySelector<HTMLElement>(sel);
+  if (!svg) return;
+  let el: HTMLElement | null = svg;
+  while (el && !(el.tagName === 'A' || el.getAttribute('role') === 'button')) {
+    el = el.parentElement as HTMLElement | null;
   }
+  el?.click();
+}, iconSel);
 
-  // 2) Falls ein Untermenü aufgeht → „Beitrag“/„Post“ klicken (textbasiert)
-  await new Promise(res => setTimeout(res, 300));
-  await page.evaluate(() => {
-    const roots = Array.from(document.querySelectorAll('div[role="menu"], div[role="dialog"]'));
-    const isVisible = (el: HTMLElement) => {
-      const s = getComputedStyle(el);
-      return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
-    };
-    for (const root of roots) {
-      const items = root.querySelectorAll<HTMLElement>('button, [role="button"], a[role="menuitem"], div[role="menuitem"]');
-      for (const el of items) {
-        if (!isVisible(el)) continue;
-        const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-        if (t.includes('beitrag') || t.includes('post')) {
-          el.click();
-          return;
-        }
+// 2) Auf Dropdown ODER Dialog-Container warten
+await page.waitForSelector('div[role="menu"], div[role="dialog"]', { timeout: 15000 });
+
+// 3) Im Dropdown „Beitrag“ / „Post“ anklicken (ohne XPath)
+await page.evaluate(() => {
+  const containers = Array.from(document.querySelectorAll('div[role="menu"], div[role="dialog"]'));
+  const isVisible = (el: HTMLElement) => {
+    const s = getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
+  };
+
+  // a) per sichtbarem Text
+  for (const root of containers) {
+    const items = root.querySelectorAll<HTMLElement>('button, [role="button"], a[role="menuitem"], div[role="menuitem"], div');
+    for (const el of items) {
+      if (!isVisible(el)) continue;
+      const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+      if (txt.includes('beitrag') || txt.includes('post')) {
+        el.click();
+        return;
       }
     }
-  });
+  }
 
-  // 3) Auf das Overlay warten (genau das aus deinem Dump)
-  await page.waitForSelector('div[role="dialog"][aria-label="Neuen Beitrag erstellen"]', { timeout: 60000 });
+  // b) Fallback: Icon mit aria-label="Beitrag"
+  const svg = document.querySelector('svg[aria-label="Beitrag"]');
+  if (svg) {
+    let el: HTMLElement | null = svg as HTMLElement;
+    while (el && !(el.getAttribute('role') === 'button' || el.tagName === 'DIV' || el.tagName === 'A')) {
+      el = el.parentElement as HTMLElement | null;
+    }
+    el?.click();
+  }
+});
+
+// 4) Jetzt auf das Overlay warten – lieber robuste Marker als festes Label
+await Promise.race([
+  page.waitForSelector('div[role="dialog"] form[role="presentation"] input[type="file"]', { timeout: 60000 }),
+  page.waitForSelector('div[role="dialog"] button, div[role="dialog"] [role="heading"]', { timeout: 60000 }),
+]);
+
 }
 
 
