@@ -663,128 +663,35 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
   /**
    * Click create button (+ icon)
    */
-private async clickCreateButton(page: Page): Promise<void> {
-  // --- dein vorhandener Teil: Plus/Erstellen klicken ---
-  const plusSelectors = [
-    'svg[aria-label*="New post"]',
-    'svg[aria-label*="Create"]',
-    'svg[aria-label*="Neuer Beitrag"]',
-    'svg[aria-label*="Beitrag"]',
-    'a[role="link"]:has(svg[aria-label*="Neuer Beitrag"])',
-    'a[role="link"]:has(svg[aria-label*="Create"])'
-  ];
+  private async clickCreateButton(page: Page): Promise<void> {
+    const plusSelectors = [
+      'svg[aria-label*="New post"]',
+      'svg[aria-label*="Create"]', 
+      'svg[aria-label*="Neuer Beitrag"]',
+      'svg[aria-label*="Beitrag erstellen"]',
+      'a[href="#"] svg',
+      'div[role="menuitem"] svg'
+    ];
 
-  let plusFound = false;
-  for (const selector of plusSelectors) {
-    try {
-      await page.waitForSelector(selector, { timeout: 7000, visible: true });
-      await page.click(selector);
-      plusFound = true;
-      logger.info(`PLUS geklickt: ${selector}`);
-      break;
-    } catch { /* try next */ }
-  }
-  if (!plusFound) {
-    throw new Error('Plus-Icon/Erstellen nicht gefunden');
-  }
-// === NACH dem erfolgreichen Klick auf das Plus/Erstellen-Icon ===
-logger.info('Suche im geöffneten Menü nach "Beitrag" / "Post"…');
-
-// 1) kurz warten, bis das Menü gerendert ist (Animation)
-await page.waitForTimeout(300);
-
-// 2) Versuche den Menüpunkt zu klicken (DE/EN)
-const clickedPost = await page.evaluate(() => {
-  const wanted = ['beitrag', 'post']; // mehrsprachig erweiterbar
-  const isVisible = (el: Element) => {
-    const rect = (el as HTMLElement).getBoundingClientRect?.();
-    const style = window.getComputedStyle(el as HTMLElement);
-    return !!rect &&
-      rect.width > 0 &&
-      rect.height > 0 &&
-      style.visibility !== 'hidden' &&
-      style.display !== 'none';
-  };
-
-  // Kandidaten: Links + Button-ähnliche Container
-  const candidates: Element[] = Array.from(
-    document.querySelectorAll('a[role="link"], button, div[role="button"]')
-  ).filter(isVisible);
-
-  // 2a) Direkter Text-Treffer
-  for (const el of candidates) {
-    const txt = (el.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    if (wanted.some(w => txt === w || txt.includes(w))) {
-      (el as HTMLElement).click();
-      return true;
-    }
-  }
-
-  // 2b) aria-label am Element
-  for (const el of candidates) {
-    const aria = ((el.getAttribute('aria-label') || '')).toLowerCase();
-    if (wanted.some(w => aria.includes(w))) {
-      (el as HTMLElement).click();
-      return true;
-    }
-  }
-
-  // 2c) aria-label an enthaltenem SVG/Icon
-  for (const el of candidates) {
-    const svg = el.querySelector('svg[aria-label]');
-    if (svg) {
-      const svgLabel = (svg.getAttribute('aria-label') || '').toLowerCase();
-      if (wanted.some(w => svgLabel.includes(w))) {
-        (el as HTMLElement).click();
-        return true;
+    let plusFound = false;
+    for (const selector of plusSelectors) {
+      try {
+        await page.waitForSelector(selector, { timeout: 5000, visible: true });
+        await page.click(selector);
+        plusFound = true;
+        logger.info(`Plus-Icon gefunden mit Selektor: ${selector}`);
+        break;
+      } catch (e) {
+        continue;
       }
     }
+
+    if (!plusFound) {
+      throw new Error("Plus-Icon nicht gefunden");
+    }
+
+    await this.delay(2000);
   }
-
-  return false;
-});
-
-logger.info(`"Beitrag"/"Post" geklickt: ${clickedPost}`);
-
-// 3) Debug, falls nicht gefunden
-if (!clickedPost) {
-  const snapshot = await page.evaluate(() => {
-    const isVisible = (el: Element) => {
-      const r = (el as HTMLElement).getBoundingClientRect?.();
-      const s = window.getComputedStyle(el as HTMLElement);
-      return !!r && r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
-    };
-    const items = Array.from(document.querySelectorAll('a[role="link"], button, div[role="button"]'))
-      .filter(isVisible)
-      .slice(0, 60)
-      .map(el => {
-        const t = (el.textContent || '').trim();
-        const a = el.getAttribute('aria-label') || '';
-        const s = el.querySelector('svg[aria-label]')?.getAttribute('aria-label') || '';
-        return `[txt="${t}"] [aria="${a}"] [svg="${s}"]`;
-      });
-    return items;
-  });
-  logger.info(`DEBUG Menü-Kandidaten (erste 60): ${JSON.stringify(snapshot)}`);
-  throw new Error('Beitrag/Post im Dropdown nicht gefunden');
-}
-
-// 4) jetzt NICHT hochladen – das macht deine andere Funktion.
-//    Aber sinnvoll: kurz sicherstellen, dass das Erstell-Overlay da ist.
-//    (schadet nicht und hilft Logs zu lesen)
-try {
-  await page.waitForSelector(
-    'div[role="dialog"], [aria-label*="Neuen Beitrag"], [aria-label*="Create new post"]',
-    { timeout: 10000 }
-  );
-  logger.info('Erstell-Overlay sichtbar.');
-} catch {
-  logger.warn('Erstell-Overlay nicht eindeutig erkannt – fahre fort (Upload-Logik übernimmt).');
-}
-
-}
-
-
 
   /**
    * Upload image file
