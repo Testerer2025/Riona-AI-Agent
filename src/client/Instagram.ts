@@ -662,60 +662,83 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
 
 
 /**
- * Enhanced clickCreateButton with better Instagram UI detection
+ * Enhanced clickCreateButton with multiple strategies
  */
 private async clickCreateButton(page: Page): Promise<void> {
   logger.info("Looking for create/plus button...");
   
-  // Wait a bit for page to fully load
+  // Wait for page to load
   await this.delay(3000);
   
-  // Strategy 1: Try common plus button selectors
-  const plusSelectors = [
-    'svg[aria-label*="New post"]',
-    'svg[aria-label*="Create"]', 
-    'svg[aria-label*="Neuer Beitrag"]',
-    'svg[aria-label*="Beitrag erstellen"]',
-    '[data-testid="new-post-button"]',
-    'a[href="/create/select/"] svg',
-    'a[href*="create"] svg'
-  ];
-
   let clicked = false;
   
-  for (const selector of plusSelectors) {
-    try {
-      logger.info(`Trying plus button selector: ${selector}`);
-      await page.waitForSelector(selector, { timeout: 5000, visible: true });
-      
-      // Try clicking the SVG or its parent
-      const element = await page.$(selector);
-      if (element) {
-        await element.click();
-        clicked = true;
-        logger.info(`Plus button clicked with: ${selector}`);
-        break;
+  // Strategy 1: Try direct navigation to create page
+  try {
+    logger.info("Trying direct navigation to create page...");
+    await page.goto('https://www.instagram.com/create/select/', { 
+      waitUntil: 'networkidle2',
+      timeout: 30000 
+    });
+    
+    // Check if we're on the create page
+    const isCreatePage = await page.evaluate(() => {
+      return window.location.pathname.includes('/create/') || 
+             document.querySelector('input[type="file"]') !== null;
+    });
+    
+    if (isCreatePage) {
+      clicked = true;
+      logger.info("Successfully navigated to create page");
+    }
+  } catch (e) {
+    logger.info("Direct navigation failed, trying button approach");
+  }
+  
+  // Strategy 2: Find and click plus button if direct navigation failed
+  if (!clicked) {
+    const plusSelectors = [
+      'svg[aria-label*="New post"]',
+      'svg[aria-label*="Create"]', 
+      'svg[aria-label*="Neuer Beitrag"]',
+      'svg[aria-label*="Beitrag erstellen"]',
+      '[data-testid="new-post-button"]',
+      'a[href*="create"] svg',
+      'a[href="/"] + * svg', // Often the plus is next to home link
+    ];
+
+    for (const selector of plusSelectors) {
+      try {
+        logger.info(`Trying plus button selector: ${selector}`);
+        await page.waitForSelector(selector, { timeout: 5000, visible: true });
+        
+        const element = await page.$(selector);
+        if (element) {
+          await element.click();
+          clicked = true;
+          logger.info(`Plus button clicked with: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        continue;
       }
-    } catch (e) {
-      continue;
     }
   }
   
+  // Strategy 3: Evaluate and click in browser context
   if (!clicked) {
-    // Strategy 2: Look for any clickable element that might be the plus button
-    logger.info("Trying alternative plus button detection...");
+    logger.info("Trying browser context click...");
     
     clicked = await page.evaluate(() => {
-      // Look for elements with plus-like content
-      const candidates = document.querySelectorAll('svg, button, a[role="button"], div[role="button"]');
+      // Look for clickable elements that might be create button
+      const candidates = Array.from(document.querySelectorAll('svg, button, a, div[role="button"]'));
       
       for (const element of candidates) {
-        const ariaLabel = element.getAttribute('aria-label')?.toLowerCase() || '';
-        const text = element.textContent?.toLowerCase() || '';
+        const ariaLabel = (element.getAttribute('aria-label') || '').toLowerCase();
+        const href = (element as HTMLAnchorElement).href || '';
         
         if (ariaLabel.includes('new') || ariaLabel.includes('create') || 
             ariaLabel.includes('post') || ariaLabel.includes('plus') ||
-            text.includes('+')) {
+            href.includes('/create/')) {
           
           (element as HTMLElement).click();
           return true;
@@ -726,28 +749,32 @@ private async clickCreateButton(page: Page): Promise<void> {
   }
 
   if (!clicked) {
-    // Strategy 3: Look for navigation to create page
-    logger.info("Trying direct navigation to create page...");
-    await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'networkidle2' });
-    clicked = true;
+    throw new Error("Could not find or click create button after all strategies");
   }
 
-  if (!clicked) {
-    throw new Error("Could not find or click plus/create button");
+  // Wait for create page to load
+  await this.delay(3000);
+  
+  // Verify we're on create page or can see file input
+  const onCreatePage = await page.evaluate(() => {
+    return window.location.pathname.includes('/create/') || 
+           document.querySelector('input[type="file"]') !== null ||
+           document.querySelector('[role="dialog"]') !== null;
+  });
+  
+  if (!onCreatePage) {
+    logger.warn("May not be on create page, but continuing...");
   }
-
-  await this.delay(2000);
 }
 
-
 /**
- * Updated uploadImage method with multiple fallback strategies
+ * Updated uploadImage method - TypeScript error free
  */
 private async uploadImage(page: Page, imagePath: string): Promise<void> {
   try {
     logger.info("Starting image upload process...");
     
-    // Strategy 1: Try multiple file input selectors
+    // Strategy 1: Try multiple file input selectors with proper typing
     const fileSelectors = [
       'input[type="file"][accept*="image"]',
       'input[type="file"][accept="image/jpeg,image/png,image/heic,image/heif,image/webp,video/mp4,video/quicktime"]',
@@ -756,18 +783,24 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       '[accept*="image/jpeg"]'
     ];
     
-    let fileInput = null;
+    let uploadSuccess = false;
     let usedSelector = '';
     
-    // Try each selector with shorter timeout
+    // Try each selector
     for (const selector of fileSelectors) {
       try {
         logger.info(`Trying selector: ${selector}`);
-        await page.waitForSelector(selector, { timeout: 5000, visible: false }); // Don't require visible
-        fileInput = await page.$(selector);
+        
+        // Wait for element to exist (don't require visible)
+        await page.waitForSelector(selector, { timeout: 5000, visible: false });
+        
+        // Try to upload directly using the selector
+        const fileInput = await page.$(selector) as ElementHandle<HTMLInputElement> | null;
         if (fileInput) {
+          await fileInput.uploadFile(imagePath);
           usedSelector = selector;
-          logger.info(`Found file input with: ${selector}`);
+          uploadSuccess = true;
+          logger.info(`Upload successful with selector: ${selector}`);
           break;
         }
       } catch (e) {
@@ -776,53 +809,102 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       }
     }
     
-    if (!fileInput) {
-      // Strategy 2: Try to find the input by looking at all inputs
-      logger.info("Trying to find any file input...");
-      fileInput = await page.evaluateHandle(() => {
-        const inputs = document.querySelectorAll('input[type="file"]');
-        return inputs.length > 0 ? inputs[0] : null;
+    // Strategy 2: If direct selectors failed, make hidden inputs visible and try again
+    if (!uploadSuccess) {
+      logger.info("Making file inputs visible and trying again...");
+      
+      // Make all file inputs visible
+      await page.evaluate(() => {
+        const fileInputs = document.querySelectorAll('input[type="file"]') as NodeListOf<HTMLInputElement>;
+        for (const input of fileInputs) {
+          input.style.display = 'block';
+          input.style.visibility = 'visible';
+          input.style.opacity = '1';
+          input.style.position = 'static';
+          input.style.width = '100px';
+          input.style.height = '30px';
+          input.style.zIndex = '9999';
+        }
       });
       
-      if (!fileInput || !fileInput.asElement()) {
-        // Strategy 3: Wait longer and try again
-        logger.info("Waiting 5 more seconds for file input...");
-        await this.delay(5000);
-        
-        fileInput = await page.evaluateHandle(() => {
-          const inputs = document.querySelectorAll('input');
-          for (const input of inputs) {
-            if (input.type === 'file' || input.accept?.includes('image')) {
-              return input;
-            }
-          }
-          return null;
-        });
+      await this.delay(1000);
+      
+      // Try to find and use any visible file input
+      const visibleInput = await page.$('input[type="file"]') as ElementHandle<HTMLInputElement> | null;
+      if (visibleInput) {
+        await visibleInput.uploadFile(imagePath);
+        uploadSuccess = true;
+        usedSelector = 'made-visible';
+        logger.info("Upload successful after making input visible");
       }
     }
     
-    if (!fileInput || !fileInput.asElement()) {
+    // Strategy 3: Use page.setInputFiles as last resort
+    if (!uploadSuccess) {
+      logger.info("Trying page.setInputFiles as fallback...");
+      
+      // Check if any file inputs exist at all
+      const hasFileInput = await page.evaluate(() => {
+        return document.querySelectorAll('input[type="file"]').length > 0;
+      });
+      
+      if (hasFileInput) {
+        // Use setInputFiles on the first available input
+        const firstInputSelector = await page.evaluate(() => {
+          const inputs = document.querySelectorAll('input[type="file"]');
+          if (inputs.length > 0) {
+            // Add an ID if it doesn't have one for easier targeting
+            const input = inputs[0] as HTMLInputElement;
+            if (!input.id) {
+              input.id = 'upload-target-' + Date.now();
+            }
+            return '#' + input.id;
+          }
+          return null;
+        });
+        
+        if (firstInputSelector) {
+          await page.setInputFiles(firstInputSelector, imagePath);
+          uploadSuccess = true;
+          usedSelector = 'setInputFiles';
+          logger.info("Upload successful using setInputFiles");
+        }
+      }
+    }
+    
+    if (!uploadSuccess) {
+      // Get debugging info
+      const debugInfo = await page.evaluate(() => {
+        const allInputs = Array.from(document.querySelectorAll('input'));
+        return {
+          totalInputs: allInputs.length,
+          fileInputs: allInputs.filter(input => input.type === 'file').length,
+          inputTypes: allInputs.map(input => input.type).filter((v, i, a) => a.indexOf(v) === i),
+          acceptAttributes: allInputs.map(input => input.accept).filter(Boolean)
+        };
+      });
+      
+      logger.error("No file input found. Debug info:", debugInfo);
       throw new Error("No file input found after all strategies");
     }
     
-    // Upload the file
-    const element = fileInput.asElement()!;
-    await element.uploadFile(imagePath);
-    logger.info(`Image uploaded successfully using method: ${usedSelector || 'fallback'}`);
+    logger.info(`Image uploaded successfully using method: ${usedSelector}`);
     
     // Wait for upload to process
     await this.delay(3000);
     
-    // Check if upload was successful by looking for preview or next button
+    // Verify upload success
     try {
       await page.waitForFunction(() => {
-        // Look for image preview or next button
+        // Look for signs that upload was successful
         return document.querySelector('img[alt*="preview"]') || 
+               document.querySelector('img[src*="blob:"]') ||
+               document.querySelector('[role="button"]:has-text("Next")') ||
+               document.querySelector('[role="button"]:has-text("Weiter")') ||
                document.querySelector('button:has-text("Next")') ||
-               document.querySelector('button:has-text("Weiter")') ||
-               document.querySelector('[role="button"]:has-text("Next")');
-      }, { timeout: 10000 });
-      logger.info("Upload appears successful - found preview or next button");
+               document.querySelector('button:has-text("Weiter")');
+      }, { timeout: 15000 });
+      logger.info("Upload verification successful - found preview or next button");
     } catch (e) {
       logger.warn("Could not verify upload success, but continuing...");
     }
@@ -831,17 +913,31 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
     logger.error("Image upload failed:", error);
     
     // Additional debugging info
-    const allInputs = await page.evaluate(() => {
-      const inputs = Array.from(document.querySelectorAll('input'));
-      return inputs.map(input => ({
-        type: input.type,
-        accept: input.accept,
-        style: window.getComputedStyle(input).display,
-        visible: input.offsetParent !== null
-      }));
-    });
+    try {
+      const pageTitle = await page.title();
+      const currentUrl = await page.url();
+      logger.info(`Current page: ${pageTitle} (${currentUrl})`);
+      
+      const allInputsDebug = await page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input'));
+        return inputs.map((input, index) => ({
+          index,
+          type: input.type,
+          accept: input.accept,
+          id: input.id,
+          name: input.name,
+          className: input.className,
+          visible: input.offsetParent !== null,
+          display: window.getComputedStyle(input).display,
+          position: window.getComputedStyle(input).position
+        }));
+      });
+      
+      logger.info("All inputs debug info:", JSON.stringify(allInputsDebug, null, 2));
+    } catch (debugError) {
+      logger.error("Could not get debug info:", debugError);
+    }
     
-    logger.info("All inputs found:", allInputs);
     throw error;
   }
 }
