@@ -663,65 +663,130 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
   /**
    * Click create button (+ icon)
    */
-  private async clickCreateButton(page: Page): Promise<void> {
-// 1) Plus-Icon (Erstellen) klicken – DE/EN
-const iconSel = 'svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]';
-const icon = await page.waitForSelector(iconSel, { timeout: 15000 });
-if (!icon) throw new Error('Erstellen-Icon nicht gefunden');
+private async clickCreateButton(page: Page): Promise<void> {
+  logger.info('STEP 1: click plus (Neuer Beitrag)');
 
-// klickbaren Parent (Link/Role=button) triggern
-await page.evaluate((sel) => {
-  const svg = document.querySelector<HTMLElement>(sel);
-  if (!svg) return;
-  let el: HTMLElement | null = svg;
-  while (el && !(el.tagName === 'A' || el.getAttribute('role') === 'button')) {
-    el = el.parentElement as HTMLElement | null;
+  // 1) Plus/Erstellen finden (DE/EN) und klicken
+  const iconSel = 'svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]';
+  const icon = await page.waitForSelector(iconSel, { timeout: 15000 });
+  if (!icon) throw new Error('Erstellen-Icon nicht gefunden');
+
+  const plusClick = await page.evaluate((sel) => {
+    const svg = document.querySelector<HTMLElement>(sel);
+    if (!svg) return 'no_svg';
+
+    // nächstgelegenen klickbaren parent (a/role=button/tabindex) klicken
+    const clickable = (svg.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || null;
+    if (clickable) { clickable.click(); return 'clicked_parent'; }
+
+    svg.click();
+    return 'clicked_svg';
+  }, iconSel);
+  logger.info(`plus click result=${plusClick}`);
+
+  // 2) Dropdown: auf „Beitrag“ ODER „KI“ (als Marker) warten
+  logger.info('STEP 2: wait until dropdown items are in DOM');
+  const dropdownReady = await page.waitForFunction(() => {
+    const isVisible = (el: HTMLElement) => {
+      const s = getComputedStyle(el);
+      // offsetParent ist bei fixed overlays oft null → auf sichtbarkeit per styles prüfen
+      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    };
+
+    // portal-layer (dein dump): aria-hidden="false"
+    const portals = Array.from(document.querySelectorAll<HTMLElement>('div[aria-hidden="false"]'));
+    if (portals.length === 0) return false;
+
+    // suche einen Link/Button mit Text "Beitrag" oder "KI" (als Indikator, dass dropdown offen ist)
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
+    return candidates.some(el => {
+      if (!isVisible(el)) return false;
+      const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+      return t.includes('beitrag') || t === 'ki';
+    });
+  }, { timeout: 15000 }).then(() => true).catch(() => false);
+
+  logger.info(`dropdown ready=${dropdownReady}`);
+  if (!dropdownReady) {
+    // zum debuggen ein paar texte einsammeln
+    const texts = await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll<HTMLElement>('a,button,div,span'));
+      const vis = (el: HTMLElement) => {
+        const s = getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+      };
+      const arr: string[] = [];
+      for (const el of all) {
+        if (!vis(el)) continue;
+        const t = (el.innerText || el.textContent || '').trim();
+        if (t) arr.push(t.replace(/\s+/g,' ').slice(0,80));
+      }
+      return Array.from(new Set(arr)).slice(0,50);
+    });
+    logger.info(`DEBUG dropdown texts(first 50): ${JSON.stringify(texts)}`);
+    throw new Error('Dropdown nach Plus-Klick nicht sichtbar');
   }
-  el?.click();
-}, iconSel);
 
-// 2) Auf Dropdown ODER Dialog-Container warten
-await page.waitForSelector('div[role="menu"], div[role="dialog"]', { timeout: 15000 });
+  // 3) „Beitrag“ gezielt anklicken (und NICHT „KI“)
+  logger.info('STEP 3: click "Beitrag" in dropdown');
+  const clickedPost = await page.evaluate(() => {
+    const isVisible = (el: HTMLElement) => {
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    };
 
-// 3) Im Dropdown „Beitrag“ / „Post“ anklicken (ohne XPath)
-await page.evaluate(() => {
-  const containers = Array.from(document.querySelectorAll('div[role="menu"], div[role="dialog"]'));
-  const isVisible = (el: HTMLElement) => {
-    const s = getComputedStyle(el);
-    return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
-  };
-
-  // a) per sichtbarem Text
-  for (const root of containers) {
-    const items = root.querySelectorAll<HTMLElement>('button, [role="button"], a[role="menuitem"], div[role="menuitem"], div');
-    for (const el of items) {
+    // 3a) Versuche präzise den Link-Container mit Text Beitrag zu finden
+    const links = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
+    for (const el of links) {
       if (!isVisible(el)) continue;
       const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
-      if (txt.includes('beitrag') || txt.includes('post')) {
-        el.click();
-        return;
+      if (!txt) continue;
+      // ausschließen, dass wir den KI-eintrag treffen
+      if (txt.includes('ki')) continue;
+      if (txt === 'beitrag' || txt.includes('beitrag') || txt === 'post' || txt.includes('post')) {
+        // hochklettern bis etwas Klickbares
+        const clickable = (el.closest('a,[role="button"],button,div') as HTMLElement) || el;
+        clickable.click();
+        return true;
       }
     }
-  }
 
-  // b) Fallback: Icon mit aria-label="Beitrag"
-  const svg = document.querySelector('svg[aria-label="Beitrag"]');
-  if (svg) {
-    let el: HTMLElement | null = svg as HTMLElement;
-    while (el && !(el.getAttribute('role') === 'button' || el.tagName === 'DIV' || el.tagName === 'A')) {
-      el = el.parentElement as HTMLElement | null;
+    // 3b) Fallback: per Icon (svg[aria-label="Beitrag"])
+    const svg = document.querySelector<HTMLElement>('svg[aria-label="Beitrag"]');
+    if (svg) {
+      const clickable = (svg.closest('a,[role="button"],button,div') as HTMLElement) || svg;
+      clickable.click();
+      return true;
     }
-    el?.click();
+    return false;
+  });
+  logger.info(`clicked Beitrag=${clickedPost}`);
+  if (!clickedPost) throw new Error('Beitrag-Eintrag nicht klickbar gefunden');
+
+  // 4) Auf Upload-Overlay warten: robust → irgendein file input
+  logger.info('STEP 4: wait for file input (overlay)');
+  let overlayVia: string | null = null;
+
+  // bevorzugt ein input im dialog
+  try {
+    await page.waitForSelector('div[role="dialog"] input[type="file"]', { timeout: 60000 });
+    overlayVia = 'dialog-file-input';
+  } catch {}
+
+  if (!overlayVia) {
+    // Fallback: globaler file input (IG A/B)
+    const start = Date.now();
+    while (Date.now() - start < 60000) {
+      const anyInput = await page.$('input[type="file"]');
+      if (anyInput) { overlayVia = 'any-file-input'; break; }
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
-});
 
-// 4) Jetzt auf das Overlay warten – lieber robuste Marker als festes Label
-await Promise.race([
-  page.waitForSelector('div[role="dialog"] form[role="presentation"] input[type="file"]', { timeout: 60000 }),
-  page.waitForSelector('div[role="dialog"] button, div[role="dialog"] [role="heading"]', { timeout: 60000 }),
-]);
-
+  logger.info(`overlay ready via=${overlayVia}`);
+  if (!overlayVia) throw new Error('Upload-Overlay (file input) nicht erschienen');
 }
+
 
 
 
