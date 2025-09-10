@@ -687,108 +687,101 @@ private async clickCreateButton(page: Page): Promise<void> {
   if (!plusFound) {
     throw new Error('Plus-Icon/Erstellen nicht gefunden');
   }
+// === NACH dem erfolgreichen Klick auf das Plus/Erstellen-Icon ===
+logger.info('Suche im geöffneten Menü nach "Beitrag" / "Post"…');
 
-  // --- 1) warte auf geöffnetes Dropdown neben "Erstellen" ---
-  logger.info('Warte auf Dropdown (role=menu/Portal)…');
-  await page.waitForFunction(() => {
-    // Dropdown kommt als Portal/Popover; oft role="menu" oder aria-hidden=false
-    return !!(document.querySelector('[role="menu"]') ||
-              document.querySelector('div[aria-hidden="false"]'));
-  }, { timeout: 10000 });
+// 1) kurz warten, bis das Menü gerendert ist (Animation)
+await page.waitForTimeout(300);
 
-  // --- 2) im Dropdown den Punkt "Beitrag" anklicken ---
-  logger.info('Suche im Dropdown nach "Beitrag"…');
-  const clickedBeitrag = await page.evaluate(() => {
-    const roots: Element[] = [];
-    const menu = document.querySelector('[role="menu"]');
-    if (menu) roots.push(menu);
-    document.querySelectorAll<HTMLElement>('div[aria-hidden="false"]').forEach(d => roots.push(d));
+// 2) Versuche den Menüpunkt zu klicken (DE/EN)
+const clickedPost = await page.evaluate(() => {
+  const wanted = ['beitrag', 'post']; // mehrsprachig erweiterbar
+  const isVisible = (el: Element) => {
+    const rect = (el as HTMLElement).getBoundingClientRect?.();
+    const style = window.getComputedStyle(el as HTMLElement);
+    return !!rect &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.visibility !== 'hidden' &&
+      style.display !== 'none';
+  };
 
-    const matchText = (el: Element, needle: string) =>
-      (el.textContent || '').trim().toLowerCase().includes(needle);
+  // Kandidaten: Links + Button-ähnliche Container
+  const candidates: Element[] = Array.from(
+    document.querySelectorAll('a[role="link"], button, div[role="button"]')
+  ).filter(isVisible);
 
-    for (const root of roots) {
-      // mögliche Klickziele: a, div[role=menuitem], button
-      const candidates = Array.from(root.querySelectorAll<HTMLElement>(
-        'a, button, div[role="menuitem"], div[role="button"], span, div'
-      ));
-      const item = candidates.find(el => matchText(el, 'beitrag'));
-      if (item) {
-        (item as HTMLElement).click();
+  // 2a) Direkter Text-Treffer
+  for (const el of candidates) {
+    const txt = (el.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (wanted.some(w => txt === w || txt.includes(w))) {
+      (el as HTMLElement).click();
+      return true;
+    }
+  }
+
+  // 2b) aria-label am Element
+  for (const el of candidates) {
+    const aria = ((el.getAttribute('aria-label') || '')).toLowerCase();
+    if (wanted.some(w => aria.includes(w))) {
+      (el as HTMLElement).click();
+      return true;
+    }
+  }
+
+  // 2c) aria-label an enthaltenem SVG/Icon
+  for (const el of candidates) {
+    const svg = el.querySelector('svg[aria-label]');
+    if (svg) {
+      const svgLabel = (svg.getAttribute('aria-label') || '').toLowerCase();
+      if (wanted.some(w => svgLabel.includes(w))) {
+        (el as HTMLElement).click();
         return true;
       }
     }
-    return false;
-  });
-
-  logger.info(`"Beitrag" im Dropdown geklickt: ${clickedBeitrag}`);
-  if (!clickedBeitrag) {
-    // Debug: einmal alle Texte loggen
-    const txt = await page.evaluate(() => {
-      const roots: Element[] = [];
-      const menu = document.querySelector('[role="menu"]');
-      if (menu) roots.push(menu);
-      document.querySelectorAll<HTMLElement>('div[aria-hidden="false"]').forEach(d => roots.push(d));
-      const texts: string[] = [];
-      for (const r of roots) {
-        r.querySelectorAll('*').forEach(n => {
-          const t = (n.textContent || '').trim();
-          if (t) texts.push(t.slice(0, 80));
-        });
-      }
-      return texts.slice(0, 60);
-    });
-    logger.info('DEBUG Dropdown-Texte:', txt);
-    throw new Error('Beitrag im Dropdown nicht gefunden/geklickt');
   }
 
-  // --- 3) warte auf das Overlay "Neuen Beitrag erstellen" ---
-  logger.info('Warte auf Overlay "Neuen Beitrag erstellen"…');
-  await page.waitForSelector('div[role="dialog"]', { timeout: 15000, visible: true });
-  // Überschrift ist manchmal [role=heading], manchmal <h1>
-  await page.waitForFunction(() => {
-    const dlg = document.querySelector('div[role="dialog"]');
-    if (!dlg) return false;
-    const heading = dlg.querySelector('[role="heading"], h1, h2');
-    return heading && /neuen beitrag erstellen/i.test(heading.textContent || '');
-  }, { timeout: 15000 });
+  return false;
+});
 
-  // --- 4) Button "Vom Computer auswählen" klicken ---
-  logger.info('Klicke "Vom Computer auswählen"…');
-  const chooseClicked = await page.evaluate(() => {
-    const dlg = document.querySelector('div[role="dialog"]');
-    if (!dlg) return false;
+logger.info(`"Beitrag"/"Post" geklickt: ${clickedPost}`);
 
-    const btns = Array.from(dlg.querySelectorAll<HTMLElement>('button, a[role="button"]'));
-    const btn =
-      btns.find(b => (b.textContent || '').toLowerCase().includes('vom computer auswählen')) ||
-      btns.find(b => (b.textContent || '').toLowerCase().includes('vom computer')) ||
-      btns.find(b => (b.textContent || '').toLowerCase().includes('auswählen'));
-
-    if (btn) {
-      (btn as HTMLElement).click();
-      return true;
-    }
-    return false;
+// 3) Debug, falls nicht gefunden
+if (!clickedPost) {
+  const snapshot = await page.evaluate(() => {
+    const isVisible = (el: Element) => {
+      const r = (el as HTMLElement).getBoundingClientRect?.();
+      const s = window.getComputedStyle(el as HTMLElement);
+      return !!r && r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+    };
+    const items = Array.from(document.querySelectorAll('a[role="link"], button, div[role="button"]'))
+      .filter(isVisible)
+      .slice(0, 60)
+      .map(el => {
+        const t = (el.textContent || '').trim();
+        const a = el.getAttribute('aria-label') || '';
+        const s = el.querySelector('svg[aria-label]')?.getAttribute('aria-label') || '';
+        return `[txt="${t}"] [aria="${a}"] [svg="${s}"]`;
+      });
+    return items;
   });
-  logger.info(`"Vom Computer auswählen" geklickt: ${chooseClicked}`);
-  if (!chooseClicked) {
-    // Fallback: manchmal ist der Button im Dialogbody nur 1 Button
-    await page.click('div[role="dialog"] button');
-  }
+  logger.info(`DEBUG Menü-Kandidaten (erste 60): ${JSON.stringify(snapshot)}`);
+  throw new Error('Beitrag/Post im Dropdown nicht gefunden');
+}
 
-  // --- 5) jetzt erst kommt der file-input ins DOM → darauf warten ---
-  logger.info('Warte auf file input…');
-  await page.waitForFunction(() => {
-    const sel = 'input[type="file"]';
-    const inputs = Array.from(document.querySelectorAll<HTMLInputElement>(sel));
-    // Instagram setzt accept dynamisch; wir akzeptieren jedes file input im Dialog
-    return inputs.some(i => i.isConnected && i.offsetParent !== null);
-  }, { timeout: 20000 });
+// 4) jetzt NICHT hochladen – das macht deine andere Funktion.
+//    Aber sinnvoll: kurz sicherstellen, dass das Erstell-Overlay da ist.
+//    (schadet nicht und hilft Logs zu lesen)
+try {
+  await page.waitForSelector(
+    'div[role="dialog"], [aria-label*="Neuen Beitrag"], [aria-label*="Create new post"]',
+    { timeout: 10000 }
+  );
+  logger.info('Erstell-Overlay sichtbar.');
+} catch {
+  logger.warn('Erstell-Overlay nicht eindeutig erkannt – fahre fort (Upload-Logik übernimmt).');
+}
 
-  // Optionales Debug: wie viele Inputs?
-  const count = await page.evaluate(() => document.querySelectorAll('input[type="file"]').length);
-  logger.info(`file inputs gefunden: ${count}`);
 }
 
 
