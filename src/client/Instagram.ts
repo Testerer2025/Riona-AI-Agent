@@ -663,195 +663,210 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
   /**
    * Click create button (+ icon)
    */
-private async clickCreateButton(page: Page): Promise<void> {
-  logger.info('STEP 1: click plus (Neuer Beitrag)');
+  private async clickCreateButton(page: Page): Promise<void> {
+  // 1) Plus/Erstellen finden und klicken (mehrere robuste Kandidaten)
+  const plusSelectors = [
+    'svg[aria-label*="Neuer Beitrag"]',
+    'svg[aria-label*="New post"]',
+    'svg[aria-label="Create"]',
+    // Fallbacks über das sichtbare Sidebar-Item "Erstellen"/"Create"
+    'a[role="link"] span',
+  ];
 
-  // 1) Plus/Erstellen finden (DE/EN) und klicken
-  const iconSel = 'svg[aria-label="Neuer Beitrag"], svg[aria-label*="New post"]';
-  const icon = await page.waitForSelector(iconSel, { timeout: 15000 });
-  if (!icon) throw new Error('Erstellen-Icon nicht gefunden');
+  let clickedPlus = false;
+  for (const sel of plusSelectors) {
+    try {
+      const handle = await page.waitForSelector(sel, { timeout: 5000 });
+      if (!handle) continue;
 
-  const plusClick = await page.evaluate((sel) => {
-    const svg = document.querySelector<HTMLElement>(sel);
-    if (!svg) return 'no_svg';
+      // Nur sichtbare Elemente klicken
+      const visible = await handle.evaluate((el) => {
+        const s = getComputedStyle(el as HTMLElement);
+        return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+      });
+      if (!visible) continue;
 
-    // nächstgelegenen klickbaren parent (a/role=button/tabindex) klicken
-    const clickable = (svg.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || null;
-    if (clickable) { clickable.click(); return 'clicked_parent'; }
+      // Bei Icon: den anklickbaren Parent erwischen; bei Text: sicherstellen, dass es "Erstellen"/"Create" ist
+      const clicked = await page.evaluate((selector) => {
+        const isVisible = (el: Element) => {
+          const s = getComputedStyle(el as HTMLElement);
+          return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+        };
 
-    svg.click();
-    return 'clicked_svg';
-  }, iconSel);
-  logger.info(`plus click result=${plusClick}`);
+        // 1a) direkte Icon-Selektoren
+        let svg = document.querySelector<HTMLElement>('svg[aria-label*="Neuer Beitrag"], svg[aria-label*="New post"], svg[aria-label="Create"]');
+        if (svg && isVisible(svg)) {
+          const clickable = (svg.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || svg;
+          clickable.click();
+          return 'clicked-plus-icon';
+        }
 
-  // 2) Dropdown: auf „Beitrag“ ODER „KI“ (als Marker) warten
-  logger.info('STEP 2: wait until dropdown items are in DOM');
+        // 1b) Fallback über den Sidebar-Text (span)
+        if (selector === 'a[role="link"] span') {
+          const spans = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"] span'));
+          const cand = spans.find((el) => {
+            if (!isVisible(el)) return false;
+            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+            return t === 'erstellen' || t === 'create';
+          });
+          if (cand) {
+            const clickable = (cand.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || cand;
+            clickable.click();
+            return 'clicked-plus-text';
+          }
+        }
+
+        return 'no-click';
+      }, sel);
+
+      if (clicked !== 'no-click') {
+        logger.info(`Plus/Erstellen geklickt via: ${clicked}`);
+        clickedPlus = true;
+        break;
+      }
+    } catch {
+      // weiterprobieren
+    }
+  }
+
+  if (!clickedPlus) {
+    throw new Error('Plus-Icon/Erstellen nicht gefunden oder nicht klickbar');
+  }
+
+  // kurze Pause, damit das Dropdown/Overlay mounten kann
+  await this.delay(500);
+
+  // 2) Auf Dropdown warten (Portal-Layer), dann "Beitrag" klicken (NICHT "KI")
+  logger.info('Warte auf Dropdown mit "Beitrag"…');
+
   const dropdownReady = await page.waitForFunction(() => {
-    const isVisible = (el: HTMLElement) => {
-      const s = getComputedStyle(el);
-      // offsetParent ist bei fixed overlays oft null → auf sichtbarkeit per styles prüfen
+    const isVisible = (el: Element) => {
+      const s = getComputedStyle(el as HTMLElement);
       return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
     };
-
-    // portal-layer (dein dump): aria-hidden="false"
+    // IG rendert Dropdown häufig in Portals, markiert über aria-hidden="false"
     const portals = Array.from(document.querySelectorAll<HTMLElement>('div[aria-hidden="false"]'));
     if (portals.length === 0) return false;
 
-    // suche einen Link/Button mit Text "Beitrag" oder "KI" (als Indikator, dass dropdown offen ist)
-    const candidates = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
-    return candidates.some(el => {
+    // Prüfe, ob irgendwo ein sichtbarer Eintrag "Beitrag" existiert (de/en)
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
+    return nodes.some((el) => {
       if (!isVisible(el)) return false;
       const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-      return t.includes('beitrag') || t === 'ki';
+      if (!t) return false;
+      // "KI" ist der andere Menüpunkt – den nutzen wir nur als Marker, klicken ihn nicht.
+      return t.includes('beitrag') || t === 'post' || t.includes('post') || t === 'ki';
     });
-  }, { timeout: 15000 }).then(() => true).catch(() => false);
+  }, { timeout: 10000 }).then(() => true).catch(() => false);
 
   logger.info(`dropdown ready=${dropdownReady}`);
   if (!dropdownReady) {
-    // zum debuggen ein paar texte einsammeln
+    // Debug-Hilfe: sichtbare Texte loggen
     const texts = await page.evaluate(() => {
-      const all = Array.from(document.querySelectorAll<HTMLElement>('a,button,div,span'));
-      const vis = (el: HTMLElement) => {
-        const s = getComputedStyle(el);
+      const isVisible = (el: Element) => {
+        const s = getComputedStyle(el as HTMLElement);
         return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
       };
+      const all = Array.from(document.querySelectorAll<HTMLElement>('a,button,div,span'));
       const arr: string[] = [];
       for (const el of all) {
-        if (!vis(el)) continue;
+        if (!isVisible(el)) continue;
         const t = (el.innerText || el.textContent || '').trim();
-        if (t) arr.push(t.replace(/\s+/g,' ').slice(0,80));
+        if (t) arr.push(t.replace(/\s+/g, ' ').slice(0, 100));
       }
-      return Array.from(new Set(arr)).slice(0,50);
+      return Array.from(new Set(arr)).slice(0, 80);
     });
-    logger.info(`DEBUG dropdown texts(first 50): ${JSON.stringify(texts)}`);
+    logger.info(`DEBUG sichtbare Texte (80 max): ${JSON.stringify(texts)}`);
     throw new Error('Dropdown nach Plus-Klick nicht sichtbar');
   }
 
-  // 3) „Beitrag“ gezielt anklicken (und NICHT „KI“)
-  logger.info('STEP 3: click "Beitrag" in dropdown');
+  // "Beitrag" klicken (und "KI" bewusst überspringen)
   const clickedPost = await page.evaluate(() => {
-    const isVisible = (el: HTMLElement) => {
-      const s = getComputedStyle(el);
+    const isVisible = (el: Element) => {
+      const s = getComputedStyle(el as HTMLElement);
       return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
     };
-
-    // 3a) Versuche präzise den Link-Container mit Text Beitrag zu finden
-    const links = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
-    for (const el of links) {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('a[role="link"],button,[role="button"],div,span'));
+    for (const el of nodes) {
       if (!isVisible(el)) continue;
-      const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
-      if (!txt) continue;
-      // ausschließen, dass wir den KI-eintrag treffen
-      if (txt.includes('ki')) continue;
-      if (txt === 'beitrag' || txt.includes('beitrag') || txt === 'post' || txt.includes('post')) {
-        // hochklettern bis etwas Klickbares
-        const clickable = (el.closest('a,[role="button"],button,div') as HTMLElement) || el;
+      const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+      if (!t) continue;
+      if (t.includes('ki')) continue; // nie den KI-Eintrag anklicken
+      if (t === 'beitrag' || t.includes('beitrag') || t === 'post' || t.includes('post')) {
+        const clickable = (el.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || el;
         clickable.click();
         return true;
       }
     }
-
-    // 3b) Fallback: per Icon (svg[aria-label="Beitrag"])
+    // Fallback über Icon im Dropdown
     const svg = document.querySelector<HTMLElement>('svg[aria-label="Beitrag"]');
     if (svg) {
-      const clickable = (svg.closest('a,[role="button"],button,div') as HTMLElement) || svg;
+      const clickable = (svg.closest('a,[role="button"],button,[tabindex]') as HTMLElement) || svg;
       clickable.click();
       return true;
     }
     return false;
   });
-  logger.info(`clicked Beitrag=${clickedPost}`);
-  if (!clickedPost) throw new Error('Beitrag-Eintrag nicht klickbar gefunden');
 
-  // 4) Auf Upload-Overlay warten: robust → irgendein file input
-  logger.info('STEP 4: wait for file input (overlay)');
-  let overlayVia: string | null = null;
+  logger.info(`"Beitrag" angeklickt: ${clickedPost}`);
+  if (!clickedPost) throw new Error('"Beitrag" im Dropdown nicht klickbar gefunden');
 
-  // bevorzugt ein input im dialog
+  // 3) Auf Upload-Overlay/File-Input warten
+  logger.info('Warte auf File-Input…');
+  let inputAppeared = false;
+
   try {
-    await page.waitForSelector('div[role="dialog"] input[type="file"]', { timeout: 60000 });
-    overlayVia = 'dialog-file-input';
-  } catch {}
-
-  if (!overlayVia) {
-    // Fallback: globaler file input (IG A/B)
-    const start = Date.now();
-    while (Date.now() - start < 60000) {
-      const anyInput = await page.$('input[type="file"]');
-      if (anyInput) { overlayVia = 'any-file-input'; break; }
-      await new Promise(r => setTimeout(r, 300));
+    await page.waitForSelector('div[role="dialog"] input[type="file"]', { timeout: 30000 });
+    inputAppeared = true;
+    logger.info('File-Input im Dialog gefunden');
+  } catch {
+    // globaler Fallback (manche A/B UIs hängen es nicht direkt in den Dialog)
+    try {
+      await page.waitForSelector('input[type="file"]', { timeout: 15000 });
+      inputAppeared = true;
+      logger.info('File-Input global gefunden');
+    } catch {
+      // nichts
     }
   }
 
-  logger.info(`overlay ready via=${overlayVia}`);
-  if (!overlayVia) throw new Error('Upload-Overlay (file input) nicht erschienen');
+  if (!inputAppeared) {
+    // nochmal Hilfe-Log
+    const inputs = await page.evaluate(() => {
+      const arr = Array.from(document.querySelectorAll('input[type="file"]'));
+      return arr.map((el) => {
+        const p = el.closest('div[role="dialog"]');
+        return { inDialog: !!p, multiple: (el as HTMLInputElement).multiple, accept: (el as HTMLInputElement).accept };
+      });
+    });
+    logger.info(`DEBUG file inputs snapshot: ${JSON.stringify(inputs)}`);
+    throw new Error('Upload-Overlay (file input) nicht erschienen');
+  }
+
+  // kleine Pause, dann geht dein Upload-Schritt weiter
+  await this.delay(300);
 }
-
-
 
 
   /**
    * Upload image file
    */
-private async uploadImage(page: Page, imagePath: string): Promise<void> {
-  try {
-    // Optional: „Vom Computer auswählen“ / „Select from computer“
-    await page.evaluate(() => {
-      const root = document.querySelector('div[role="dialog"]') || document;
-      const isVisible = (el: HTMLElement) => {
-        const s = getComputedStyle(el);
-        return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
-      };
-      const btns = root!.querySelectorAll<HTMLElement>('button, [role="button"]');
-      for (const el of btns) {
-        if (!isVisible(el)) continue;
-        const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-        if (t.includes('vom computer auswählen') || t.includes('select from computer') || t.includes('computer')) {
-          el.click();
-          return;
-        }
-      }
-    });
-
-    // kleine Render-Pause
-    await new Promise(res => setTimeout(res, 300));
-
-    // File-Input im Dialog finden (sichtbar ist egal – IG versteckt ihn oft)
-    const inputHandle =
-      await page.$('div[role="dialog"] form[role="presentation"] input[type="file"]') ||
-      await page.$('div[role="dialog"] input[type="file"]') ||
-      await page.$('input[type="file"]');
-
-    if (!inputHandle) {
-      throw new Error('File-Input nicht gefunden (UI geändert?)');
-    }
-
-    // accept entfernen (falls IG zu restriktiv ist)
+  private async uploadImage(page: Page, imagePath: string): Promise<void> {
     try {
-      await page.evaluate((el: HTMLInputElement) => el.removeAttribute('accept'), inputHandle);
-    } catch {}
-
-    // Datei setzen (funktioniert auch wenn Input unsichtbar ist)
-    // @ts-ignore
-    if (typeof inputHandle.setInputFiles === 'function') {
-      // @ts-ignore
-      await inputHandle.setInputFiles(imagePath);
-    } else {
-      // @ts-ignore
-      await inputHandle.uploadFile(imagePath);
+      const fileSel = 'input[type="file"][accept*="image"]';
+      await page.waitForSelector(fileSel, { timeout: 15_000 });
+      const fileInput = await page.$(fileSel);
+      if (!fileInput) throw new Error("Kein Datei‑Input gefunden!");
+      
+      await fileInput.uploadFile(imagePath);
+      logger.info("Bild erfolgreich hochgeladen");
+      await this.delay(3000);
+      
+    } catch (error) {
+      logger.error("Fehler beim Datei-Upload:", error);
+      throw error;
     }
-
-    // kurze Pause, dann auf die nächste Phase (Crop/Weiter) warten
-    await new Promise(res => setTimeout(res, 800));
-    await page.waitForSelector('div[role="dialog"] [role="button"]', { timeout: 60000 });
-
-  } catch (error) {
-    logger.error('Fehler beim Datei-Upload:', error);
-    throw error;
   }
-}
-
-
 
   /**
    * Click Next button
