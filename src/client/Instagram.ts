@@ -725,7 +725,7 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       const [btn] = await page.$x(xp);
       if (btn) {
         await btn.click({ delay: 40 });
-        await page.waitForTimeout(300);
+        await new Promise(res => setTimeout(res, 300));
         logger.info("Klick: 'Vom Computer auswählen'");
         break;
       }
@@ -757,7 +757,7 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
     }
 
     logger.info("Bild erfolgreich hochgeladen");
-    await page.waitForTimeout(3000);
+    await new Promise(res => setTimeout(res, 3000));
 
     // 5) Auf nächste UI-Phase warten (Crop/Weiter etc.)
     await page.waitForSelector('div[role="dialog"] [role="button"]', { timeout: 60_000 });
