@@ -661,37 +661,82 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
   }
 
   /**
-   * Click create button (+ icon)
-   */
-  private async clickCreateButton(page: Page): Promise<void> {
-    const plusSelectors = [
-      'svg[aria-label*="New post"]',
-      'svg[aria-label*="Create"]', 
-      'svg[aria-label*="Neuer Beitrag"]',
-      'svg[aria-label*="Beitrag erstellen"]',
-      'a[href="#"] svg',
-      'div[role="menuitem"] svg'
-    ];
+ * Enhanced clickCreateButton with better Instagram UI detection
+ */
+private async clickCreateButton(page: Page): Promise<void> {
+  logger.info("Looking for create/plus button...");
+  
+  // Wait a bit for page to fully load
+  await this.delay(3000);
+  
+  // Strategy 1: Try common plus button selectors
+  const plusSelectors = [
+    'svg[aria-label*="New post"]',
+    'svg[aria-label*="Create"]', 
+    'svg[aria-label*="Neuer Beitrag"]',
+    'svg[aria-label*="Beitrag erstellen"]',
+    '[data-testid="new-post-button"]',
+    'a[href="/create/select/"] svg',
+    'a[href*="create"] svg'
+  ];
 
-    let plusFound = false;
-    for (const selector of plusSelectors) {
-      try {
-        await page.waitForSelector(selector, { timeout: 5000, visible: true });
-        await page.click(selector);
-        plusFound = true;
-        logger.info(`Plus-Icon gefunden mit Selektor: ${selector}`);
+  let clicked = false;
+  
+  for (const selector of plusSelectors) {
+    try {
+      logger.info(`Trying plus button selector: ${selector}`);
+      await page.waitForSelector(selector, { timeout: 5000, visible: true });
+      
+      // Try clicking the SVG or its parent
+      const element = await page.$(selector);
+      if (element) {
+        await element.click();
+        clicked = true;
+        logger.info(`Plus button clicked with: ${selector}`);
         break;
-      } catch (e) {
-        continue;
       }
+    } catch (e) {
+      continue;
     }
-
-    if (!plusFound) {
-      throw new Error("Plus-Icon nicht gefunden");
-    }
-
-    await this.delay(2000);
   }
+  
+  if (!clicked) {
+    // Strategy 2: Look for any clickable element that might be the plus button
+    logger.info("Trying alternative plus button detection...");
+    
+    clicked = await page.evaluate(() => {
+      // Look for elements with plus-like content
+      const candidates = document.querySelectorAll('svg, button, a[role="button"], div[role="button"]');
+      
+      for (const element of candidates) {
+        const ariaLabel = element.getAttribute('aria-label')?.toLowerCase() || '';
+        const text = element.textContent?.toLowerCase() || '';
+        
+        if (ariaLabel.includes('new') || ariaLabel.includes('create') || 
+            ariaLabel.includes('post') || ariaLabel.includes('plus') ||
+            text.includes('+')) {
+          
+          (element as HTMLElement).click();
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  if (!clicked) {
+    // Strategy 3: Look for navigation to create page
+    logger.info("Trying direct navigation to create page...");
+    await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'networkidle2' });
+    clicked = true;
+  }
+
+  if (!clicked) {
+    throw new Error("Could not find or click plus/create button");
+  }
+
+  await this.delay(2000);
+}
 
   /**
  * Updated uploadImage method with multiple fallback strategies
@@ -851,85 +896,6 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
       throw error;
     }
   }
-
-  
-/**
- * Enhanced clickCreateButton with better Instagram UI detection
- */
-private async clickCreateButton(page: Page): Promise<void> {
-  logger.info("Looking for create/plus button...");
-  
-  // Wait a bit for page to fully load
-  await this.delay(3000);
-  
-  // Strategy 1: Try common plus button selectors
-  const plusSelectors = [
-    'svg[aria-label*="New post"]',
-    'svg[aria-label*="Create"]', 
-    'svg[aria-label*="Neuer Beitrag"]',
-    'svg[aria-label*="Beitrag erstellen"]',
-    '[data-testid="new-post-button"]',
-    'a[href="/create/select/"] svg',
-    'a[href*="create"] svg'
-  ];
-
-  let clicked = false;
-  
-  for (const selector of plusSelectors) {
-    try {
-      logger.info(`Trying plus button selector: ${selector}`);
-      await page.waitForSelector(selector, { timeout: 5000, visible: true });
-      
-      // Try clicking the SVG or its parent
-      const element = await page.$(selector);
-      if (element) {
-        await element.click();
-        clicked = true;
-        logger.info(`Plus button clicked with: ${selector}`);
-        break;
-      }
-    } catch (e) {
-      continue;
-    }
-  }
-  
-  if (!clicked) {
-    // Strategy 2: Look for any clickable element that might be the plus button
-    logger.info("Trying alternative plus button detection...");
-    
-    clicked = await page.evaluate(() => {
-      // Look for elements with plus-like content
-      const candidates = document.querySelectorAll('svg, button, a[role="button"], div[role="button"]');
-      
-      for (const element of candidates) {
-        const ariaLabel = element.getAttribute('aria-label')?.toLowerCase() || '';
-        const text = element.textContent?.toLowerCase() || '';
-        
-        if (ariaLabel.includes('new') || ariaLabel.includes('create') || 
-            ariaLabel.includes('post') || ariaLabel.includes('plus') ||
-            text.includes('+')) {
-          
-          (element as HTMLElement).click();
-          return true;
-        }
-      }
-      return false;
-    });
-  }
-
-  if (!clicked) {
-    // Strategy 3: Look for navigation to create page
-    logger.info("Trying direct navigation to create page...");
-    await page.goto('https://www.instagram.com/create/select/', { waitUntil: 'networkidle2' });
-    clicked = true;
-  }
-
-  if (!clicked) {
-    throw new Error("Could not find or click plus/create button");
-  }
-
-  await this.delay(2000);
-}
 
   /**
    * Click Share button
