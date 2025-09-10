@@ -660,7 +660,8 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
     logger.info(`🔗 Hash: ${contentHash.substring(0, 12)}...`);
   }
 
-  /**
+
+/**
  * Enhanced clickCreateButton with better Instagram UI detection
  */
 private async clickCreateButton(page: Page): Promise<void> {
@@ -738,7 +739,8 @@ private async clickCreateButton(page: Page): Promise<void> {
   await this.delay(2000);
 }
 
-  /**
+
+/**
  * Updated uploadImage method with multiple fallback strategies
  */
 private async uploadImage(page: Page, imagePath: string): Promise<void> {
@@ -843,6 +845,7 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
     throw error;
   }
 }
+
 
   /**
    * Click Next button
