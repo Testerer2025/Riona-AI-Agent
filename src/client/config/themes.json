@@ -21,26 +21,23 @@
       "weight": 1000,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Nutze das Referenzfoto als Vorlage. Erhalte Terrasse, Perspektive, Möbel, Materialien, Farben und Meerblick unverändert. Ergänze 10 bis 14 Gäste, verteilt an den Tischen: Paare und kleine Gruppen, sitzend und plaudernd, anstoßend, Drinks & kleine Snacks auf den Tischen. Lockere Sommerkleidung, natürliche Posen, realistische Proportionen. Fotorealistisch, weiches Tageslicht, natürliche Hauttöne. Keine Schrift/Logos",
+        "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks",
         "apiStyle": "natural",
-        "details": "geringe Tiefenschärfe, weiches Bokeh",
+        "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
         "size": "1024x1024",
         "quality": "standard",
-        "referenceImages": ["meer.jpg"], 
-        "referenceStrength": 0.4,
-        "usePostingText": false 
       }
     },
     {
       "id": "weather_post",
       "name": "Wetter Post",
       "enabled": true,
-      "weight": 2,
-      "promptFile": "weather_post.txt",
+      "weight": 3,
+      "promptFile": "weather.txt",
       "image": {
-        "prompt": "Ein  Himmel über Dübendorf, der entsprechend des folgenden Textes aussieht.",
+        "prompt": "Ein Bild dass das aktuelle Wetter in Dübendorf abbildet.",
         "apiStyle": "natural",
-        "details": "Schöne Himmelaufnahme, sanfte Farben, entspannte Atmosphäre",
+        "details": "Bei gutem Wetter eine sonnige Bar-Terrasse mit Drink, bei schlechtem Wetter eine Bar von innen, Leute am Dart Spielen",
         "size": "1024x1024",
         "quality": "standard"
       }
