@@ -660,58 +660,216 @@ private async generateUniquePostBasedOnHistory(): Promise<{content: string, imag
     logger.info(`🔗 Hash: ${contentHash.substring(0, 12)}...`);
   }
 
-  /**
-   * Click create button (+ icon)
-   */
-  private async clickCreateButton(page: Page): Promise<void> {
-    const plusSelectors = [
-      'svg[aria-label*="New post"]',
-      'svg[aria-label*="Create"]', 
-      'svg[aria-label*="Neuer Beitrag"]',
-      'svg[aria-label*="Beitrag erstellen"]',
-      'a[href="#"] svg',
-      'div[role="menuitem"] svg'
+/**
+ * Click create button (+ icon) and handle new Instagram UI with "Beitrag"/"KI" menu
+ */
+private async clickCreateButton(page: Page): Promise<void> {
+  // Step 1: Click the + (Create) button
+  const plusSelectors = [
+    'svg[aria-label*="New post"]',
+    'svg[aria-label*="Create"]', 
+    'svg[aria-label*="Neuer Beitrag"]',
+    'svg[aria-label*="Beitrag erstellen"]',
+    'a[href="#"] svg',
+    'div[role="menuitem"] svg'
+  ];
+
+  let plusFound = false;
+  for (const selector of plusSelectors) {
+    try {
+      await page.waitForSelector(selector, { timeout: 5000, visible: true });
+      await page.click(selector);
+      plusFound = true;
+      logger.info(`Plus-Icon gefunden mit Selektor: ${selector}`);
+      break;
+    } catch (e) {
+      continue;
+    }
+  }
+
+  if (!plusFound) {
+    throw new Error("Plus-Icon nicht gefunden");
+  }
+
+  await this.delay(2000);
+
+  // Step 2: Handle the new Instagram menu with "Beitrag" and "KI" options
+  try {
+    logger.info("Prüfe auf neues Instagram Menü...");
+    
+    // Wait for the menu to appear and look for "Beitrag" option
+    const beitragClicked = await page.evaluate(() => {
+      // Look for text containing "Beitrag" or "Post"
+      const elements = document.querySelectorAll('div, span, button, a');
+      for (const el of elements) {
+        const text = el.textContent?.trim().toLowerCase();
+        if (text === 'beitrag' || text === 'post') {
+          // Check if element is clickable and visible
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            (el as HTMLElement).click();
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    if (beitragClicked) {
+      logger.info("✅ 'Beitrag' Option gefunden und geklickt");
+      await this.delay(2000);
+    } else {
+      // Alternative: Look for clickable elements in a menu/dialog
+      const menuItemClicked = await page.evaluate(() => {
+        // Look for menu items or buttons that might contain "Beitrag"
+        const menuItems = document.querySelectorAll('[role="menuitem"], [role="button"], button, div[tabindex="0"]');
+        for (const item of menuItems) {
+          const text = item.textContent?.trim().toLowerCase();
+          if (text?.includes('beitrag') || text?.includes('post')) {
+            (item as HTMLElement).click();
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (menuItemClicked) {
+        logger.info("✅ 'Beitrag' Menüpunkt gefunden und geklickt");
+        await this.delay(2000);
+      } else {
+        logger.warn("⚠️ Kein 'Beitrag' Menü gefunden - möglicherweise altes UI oder bereits korrekt");
+      }
+    }
+
+  } catch (error) {
+    logger.warn("⚠️ Fehler beim Behandeln des neuen Instagram Menüs:", error);
+    // Continue anyway - might be old UI
+  }
+
+  // Step 3: Additional wait and verification
+  await this.delay(1000);
+  
+  // Try to verify we're in the right place by looking for file input or upload area
+  try {
+    await page.waitForSelector('input[type="file"], [role="dialog"] div', { timeout: 5000 });
+    logger.info("✅ Upload-Bereich erreicht");
+  } catch (e) {
+    logger.warn("⚠️ Upload-Bereich nicht sofort sichtbar - versuche trotzdem fortzufahren");
+  }
+}
+
+
+/**
+ * Enhanced upload image method with better error handling and debugging
+ */
+private async uploadImage(page: Page, imagePath: string): Promise<void> {
+  try {
+    logger.info("🔍 Suche nach File-Input...");
+    
+    // Enhanced selectors for file input
+    const fileSelectors = [
+      'input[type="file"][accept*="image"]',
+      'input[type="file"]',
+      'input[accept*="image"]',
+      'input[accept*="jpeg"]',
+      'input[accept*="png"]'
     ];
 
-    let plusFound = false;
-    for (const selector of plusSelectors) {
+    let fileInput = null;
+    for (const selector of fileSelectors) {
       try {
-        await page.waitForSelector(selector, { timeout: 5000, visible: true });
-        await page.click(selector);
-        plusFound = true;
-        logger.info(`Plus-Icon gefunden mit Selektor: ${selector}`);
-        break;
+        await page.waitForSelector(selector, { timeout: 5000 });
+        fileInput = await page.$(selector);
+        if (fileInput) {
+          logger.info(`✅ File-Input gefunden mit Selektor: ${selector}`);
+          break;
+        }
       } catch (e) {
         continue;
       }
     }
 
-    if (!plusFound) {
-      throw new Error("Plus-Icon nicht gefunden");
+    // If no file input found, try to debug what's on the page
+    if (!fileInput) {
+      logger.warn("⚠️ Kein File-Input gefunden - Debug-Modus aktiviert");
+      
+      // Debug: Log current page content
+      const pageContent = await page.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]');
+        if (dialog) {
+          return {
+            dialogHTML: dialog.innerHTML.substring(0, 1000),
+            allInputs: Array.from(document.querySelectorAll('input')).map(input => ({
+              type: input.type,
+              accept: input.accept,
+              visible: input.offsetParent !== null
+            }))
+          };
+        }
+        return {
+          bodyHTML: document.body.innerHTML.substring(0, 1000),
+          allInputs: Array.from(document.querySelectorAll('input')).map(input => ({
+            type: input.type,
+            accept: input.accept,
+            visible: input.offsetParent !== null
+          }))
+        };
+      });
+      
+      logger.info("📋 Debug Info:", JSON.stringify(pageContent, null, 2));
+      
+      // Try alternative approach: look for upload area and trigger click
+      const uploadAreaClicked = await page.evaluate(() => {
+        // Look for text like "Select from computer", "Auswählen", etc.
+        const elements = document.querySelectorAll('div, span, button');
+        for (const el of elements) {
+          const text = el.textContent?.trim().toLowerCase();
+          if (text?.includes('auswählen') || 
+              text?.includes('computer') || 
+              text?.includes('select') ||
+              text?.includes('upload') ||
+              text?.includes('hochladen')) {
+            (el as HTMLElement).click();
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (uploadAreaClicked) {
+        logger.info("✅ Upload-Bereich durch Text-Klick aktiviert");
+        await this.delay(2000);
+        
+        // Try to find file input again
+        for (const selector of fileSelectors) {
+          try {
+            await page.waitForSelector(selector, { timeout: 3000 });
+            fileInput = await page.$(selector);
+            if (fileInput) {
+              logger.info(`✅ File-Input nach Upload-Klick gefunden: ${selector}`);
+              break;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+      }
     }
 
-    await this.delay(2000);
-  }
-
-  /**
-   * Upload image file
-   */
-  private async uploadImage(page: Page, imagePath: string): Promise<void> {
-    try {
-      const fileSel = 'input[type="file"][accept*="image"]';
-      await page.waitForSelector(fileSel, { timeout: 15_000 });
-      const fileInput = await page.$(fileSel);
-      if (!fileInput) throw new Error("Kein Datei‑Input gefunden!");
-      
-      await fileInput.uploadFile(imagePath);
-      logger.info("Bild erfolgreich hochgeladen");
-      await this.delay(3000);
-      
-    } catch (error) {
-      logger.error("Fehler beim Datei-Upload:", error);
-      throw error;
+    if (!fileInput) {
+      throw new Error("File-Input konnte nicht gefunden werden. Instagram UI möglicherweise geändert.");
     }
+    
+    // Upload the file
+    await fileInput.uploadFile(imagePath);
+    logger.info("✅ Bild erfolgreich hochgeladen");
+    await this.delay(3000);
+    
+  } catch (error) {
+    logger.error("❌ Fehler beim Datei-Upload:", error);
+    throw error;
   }
+}
 
   /**
    * Click Next button
