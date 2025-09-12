@@ -861,7 +861,7 @@ private async uploadImage(page: Page, imagePath: string): Promise<void> {
     }
     
     // Upload the file
-    await fileInput.uploadFile(imagePath);
+    await (fileInput as any).uploadFile(imagePath);
     logger.info("✅ Bild erfolgreich hochgeladen");
     await this.delay(3000);
     
