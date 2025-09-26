@@ -21,7 +21,7 @@
       "weight": 1000,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Keine Schriften oder Logos sichtbar.",
+        "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein. Auch keine Piktogramme.",
         "apiStyle": "natural",
         "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
         "size": "1024x1024",

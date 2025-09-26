@@ -28,13 +28,38 @@ export class ActivityManager {
   private postingInterval: NodeJS.Timeout | null = null;
   
   // Configuration
-  private readonly POST_INTERVAL_MS: number;
+  private readonly BASE_POST_INTERVAL_MS: number;
+  private readonly POST_VARIANCE_MS: number;
   private readonly COMMENT_INTERVAL_MS: number = 3 * 60 * 1000; // 3 minutes
   private readonly SAFETY_BUFFER_MS: number = 30 * 1000; // 30 seconds
 
   constructor(isTestMode: boolean = false) {
-    this.POST_INTERVAL_MS = isTestMode ? 5 * 60 * 1000 : 30 * 60 * 1000; // 5min test, 30min prod
-    logger.info(`🎯 ActivityManager initialized - Post interval: ${this.POST_INTERVAL_MS / 60000} minutes`);
+    if (isTestMode) {
+      this.BASE_POST_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes for testing
+      this.POST_VARIANCE_MS = 0; // No variance in test mode
+      logger.info(`🎯 ActivityManager initialized - Post interval: ${this.BASE_POST_INTERVAL_MS / 60000} minutes (fixed)`);
+    } else {
+      this.BASE_POST_INTERVAL_MS = 4.5 * 60 * 60 * 1000; // 4.5 hours base interval
+      this.POST_VARIANCE_MS = 30 * 60 * 1000; // ±30 minutes variance (4-5 hours total)
+      
+      const minHours = (this.BASE_POST_INTERVAL_MS - this.POST_VARIANCE_MS) / (60 * 60 * 1000);
+      const maxHours = (this.BASE_POST_INTERVAL_MS + this.POST_VARIANCE_MS) / (60 * 60 * 1000);
+      
+      logger.info(`🎯 ActivityManager initialized - Post interval: ${minHours.toFixed(1)}-${maxHours.toFixed(1)} hours`);
+    }
+  }
+
+  /**
+   * Generate random posting interval between min and max
+   */
+  private getRandomPostingInterval(): number {
+    const variance = Math.random() * this.POST_VARIANCE_MS * 2 - this.POST_VARIANCE_MS; // -variance to +variance
+    const interval = this.BASE_POST_INTERVAL_MS + variance;
+    
+    const hours = interval / (60 * 60 * 1000);
+    logger.info(`⏰ Next post scheduled in ${hours.toFixed(1)} hours`);
+    
+    return Math.max(interval, 60000); // Minimum 1 minute
   }
 
   /**
@@ -43,7 +68,7 @@ export class ActivityManager {
   public start(): void {
     logger.info("🚀 Starting ActivityManager scheduler...");
     
-    // Schedule regular posting
+    // Schedule regular posting with random intervals
     this.scheduleRecurringPosts();
     
     // Start processing queue
@@ -59,7 +84,7 @@ export class ActivityManager {
     logger.info("⏹️ Stopping ActivityManager...");
     
     if (this.postingInterval) {
-      clearInterval(this.postingInterval);
+      clearTimeout(this.postingInterval);
       this.postingInterval = null;
     }
     
@@ -121,28 +146,38 @@ export class ActivityManager {
   }
 
   /**
-   * Schedule recurring posts
+   * Schedule recurring posts with random intervals
    */
-private scheduleRecurringPosts(): void {
-  // Initial post after 2 minutes
-  setTimeout(() => {
-    logger.info("🎯 Triggering initial post after 2 minutes");
-    this.requestActivity(ActivityType.POSTING);
+  private scheduleRecurringPosts(): void {
+    const scheduleNextPost = () => {
+      const nextInterval = this.getRandomPostingInterval();
+      
+      this.postingInterval = setTimeout(() => {
+        logger.info("🎯 Triggering scheduled post");
+        
+        if (this.canExecuteActivity(ActivityType.POSTING)) {
+          logger.info("✅ Can post - requesting activity");
+          this.requestActivity(ActivityType.POSTING);
+        } else {
+          logger.warn("⏰ Scheduled post skipped - system busy");
+        }
+        
+        // Schedule the next post with a new random interval
+        scheduleNextPost();
+        
+      }, nextInterval);
+    };
     
-    // Start regular interval NACH dem ersten Post
-    this.postingInterval = setInterval(() => {
-      logger.info(`⏰ Interval triggered - checking if can post...`);
-      if (this.canExecuteActivity(ActivityType.POSTING)) {
-        logger.info("✅ Can post - requesting activity");
-        this.requestActivity(ActivityType.POSTING);
-      } else {
-        logger.warn("⏰ Scheduled post skipped - system busy");
-      }
-    }, this.POST_INTERVAL_MS);
-    
-    logger.info(`📅 Next posts scheduled every ${this.POST_INTERVAL_MS / 60000} minutes`);
-  }, 2 * 60 * 1000);
-}
+    // Initial post after 2 minutes
+    setTimeout(() => {
+      logger.info("🎯 Triggering initial post after 2 minutes");
+      this.requestActivity(ActivityType.POSTING);
+      
+      // Start the random scheduling cycle
+      scheduleNextPost();
+      
+    }, 2 * 60 * 1000);
+  }
 
   /**
    * Execute activity immediately
