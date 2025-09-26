@@ -15,10 +15,24 @@
       }
     },
     {
+      "id": "bar_showcase_people",
+      "name": "Bar Showcase mit Personen",
+      "enabled": true,
+      "weight": 1000,
+      "promptFile": "bar_showcase_people.txt",
+      "image": {
+        "prompt": "Eine Bar mit kaukasischen Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein. Auch keine Piktogramme.",
+        "apiStyle": "natural",
+        "details": "Gläser, Dartscheiben, Cocktails, warme Beleuchtung",
+        "size": "1024x1024",
+        "quality": "standard"
+      }
+    },
+    {
       "id": "terrace_post",
       "name": "Terrassen Post",
       "enabled": true,
-      "weight": 1000,
+      "weight": 2,
       "promptFile": "terrace_post.txt",
       "image": {
         "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein. Auch keine Piktogramme.",
