@@ -21,7 +21,7 @@
       "weight": 1000,
       "promptFile": "bar_showcase_people.txt",
       "image": {
-        "prompt": "Eine Bar mit kaukasischen Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein. Auch keine Piktogramme.",
+        "prompt": "Eine Bar mit kaukasischen Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
         "apiStyle": "natural",
         "details": "Gläser, Dartscheiben, Cocktails, warme Beleuchtung",
         "size": "1024x1024",
@@ -35,7 +35,7 @@
       "weight": 2,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein. Auch keine Piktogramme.",
+        "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
         "apiStyle": "natural",
         "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
         "size": "1024x1024",
