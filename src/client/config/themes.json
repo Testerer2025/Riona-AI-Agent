@@ -18,10 +18,10 @@
       "id": "terrace_post",
       "name": "Terrassen Post",
       "enabled": true,
-      "weight": 1000,
+      "weight": 2,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks",
+        "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Keine Schriften oder Logos sichtbar.",
         "apiStyle": "natural",
         "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
         "size": "1024x1024",
@@ -32,7 +32,7 @@
       "id": "weather_post",
       "name": "Wetter Post",
       "enabled": true,
-      "weight": 3,
+      "weight": 1000,
       "promptFile": "weather.txt",
       "image": {
         "prompt": "Ein Bild dass das aktuelle Wetter in Dübendorf abbildet.",
