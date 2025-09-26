@@ -4,7 +4,7 @@
       "id": "bar_showcase",
       "name": "Bar Showcase",
       "enabled": true,
-      "weight": 2,
+      "weight": 1,
       "promptFile": "bar_showcase.txt",
       "image": {
         "prompt": "Stillleben von Objekten in einer Bar, keine Personen oder Schriften",
@@ -18,7 +18,7 @@
       "id": "bar_showcase_people",
       "name": "Bar Showcase mit Personen",
       "enabled": true,
-      "weight": 1000,
+      "weight": 1,
       "promptFile": "bar_showcase_people.txt",
       "image": {
         "prompt": "Eine Bar mit kaukasischen Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
@@ -32,7 +32,7 @@
       "id": "terrace_post",
       "name": "Terrassen Post",
       "enabled": true,
-      "weight": 2,
+      "weight": 1,
       "promptFile": "terrace_post.txt",
       "image": {
         "prompt": "Kaukasische Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
