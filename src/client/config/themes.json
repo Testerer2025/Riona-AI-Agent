@@ -37,7 +37,7 @@
       "image": {
         "prompt": "Ein Bild dass das aktuelle Wetter in Dübendorf abbildet.",
         "apiStyle": "natural",
-        "details": "Bei gutem Wetter eine sonnige Bar-Terrasse mit Drink, bei schlechtem Wetter eine Bar von innen, Leute am Dart Spielen",
+        "details": "Wenn das Wetter aktuell gut ist: Eine sonnige Bar-Terrasse mit Drink. Wenn das Wetter aktuell schlecht ist: Eine Bar von innen, Leute am Dart Spielen. Keine Schriften oder Logos sichtbar.",
         "size": "1024x1024",
         "quality": "standard"
       }
