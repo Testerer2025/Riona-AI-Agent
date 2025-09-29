@@ -41,7 +41,7 @@ export class OpenAIImageService {
       const optimizedPrompt = this.optimizePrompt(request.prompt, request.category);
 
       // Call Google Gemini 2.5 Flash Image API
-      const imageData = await this.callImagenAPI(optimizedPrompt);
+      const imageData = await this.callGeminiImageAPI(optimizedPrompt);
       
       // Save image
       const imagePath = await this.saveImage(imageData, request.category, request.filename);
@@ -182,7 +182,7 @@ export class OpenAIImageService {
       
       const imagePrompt = this.createThemeImagePrompt(theme, postContent);
       
-      const imageData = await this.callImagenAPI(imagePrompt);
+      const imageData = await this.callGeminiImageAPI(imagePrompt);
       
       const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const category = theme.id.replace('_', '-');
@@ -262,12 +262,17 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
     try {
       logger.info(`🔄 Calling Google Imagen 3 API...`);
       
-      const result = await this.model.generateImage({
-          prompt,
-          size: "1024x1024", // optional
-          n: 1               // optional
-        });
-
+      const result = await this.model.generateContent({
+        contents: [{
+          role: "user",
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          responseModalities: ["image"],
+        }
+      });
 
       if (!result || !result.response) {
         throw new Error('No response from Imagen 3');
@@ -302,6 +307,27 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
       throw error;
     }
   }
+
+  private async callGeminiImageAPI(prompt: string, size = "1024x1024"): Promise<Buffer> {
+  // Modell anlegen – zuerst versuchen ohne Preview
+  let model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image" });
+
+  // Hilfsfunktion zum eigentlichen Call
+  const run = async (m: any) => {
+    const res = await m.generateImage({ prompt, size, n: 1 });
+    if (!res?.data?.[0]?.b64_json) throw new Error("No image returned");
+    return Buffer.from(res.data[0].b64_json, "base64");
+  };
+
+  try {
+    return await run(model);
+  } catch (e: any) {
+    // Fallback auf Preview-Modell (häufig nötig)
+    model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image-preview" });
+    return await run(model);
+  }
+}
+
 
   /**
    * Save image buffer to file system
