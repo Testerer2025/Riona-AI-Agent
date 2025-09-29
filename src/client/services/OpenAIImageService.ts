@@ -3,6 +3,7 @@ import path from 'path';
 import logger from '../../config/logger';
 import Replicate from 'replicate';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { geminiApiKeys } from '../../secret';
 
 export interface OpenAIImageRequest {
   prompt: string;
@@ -11,15 +12,16 @@ export interface OpenAIImageRequest {
 }
 
 export class OpenAIImageService {
-  private readonly googleAI: GoogleGenerativeAI;
-  private readonly model: any;
+  private googleAI: GoogleGenerativeAI;
+  private model: any;
+  private currentApiKeyIndex: number = 0;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_API_KEY || '';
-    if (!apiKey) {
-      throw new Error('GOOGLE_API_KEY environment variable is required');
+    if (!geminiApiKeys || geminiApiKeys.length === 0) {
+      throw new Error('No Gemini API keys available in secret.ts');
     }
     
+    const apiKey = geminiApiKeys[this.currentApiKeyIndex];
     this.googleAI = new GoogleGenerativeAI(apiKey);
     this.model = this.googleAI.getGenerativeModel({ 
       model: "imagen-3.0-generate-001" 
