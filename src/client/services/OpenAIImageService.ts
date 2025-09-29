@@ -24,7 +24,7 @@ export class OpenAIImageService {
     const apiKey = geminiApiKeys[this.currentApiKeyIndex];
     this.googleAI = new GoogleGenerativeAI(apiKey);
     this.model = this.googleAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash-image" 
+      model: "gemini-2.5-flash-image-preview" 
     });
     
     logger.info("🎨 Google Gemini 2.5 Flash Image Service initialized");
@@ -308,25 +308,31 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
     }
   }
 
-  private async callGeminiImageAPI(prompt: string, size = "1024x1024"): Promise<Buffer> {
-  // Modell anlegen – zuerst versuchen ohne Preview
-  let model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image" });
+private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
+  // primär das Preview-Modell verwenden
+  let model = this.model;
 
-  // Hilfsfunktion zum eigentlichen Call
   const run = async (m: any) => {
-    const res = await m.generateImage({ prompt, size, n: 1 });
-    if (!res?.data?.[0]?.b64_json) throw new Error("No image returned");
-    return Buffer.from(res.data[0].b64_json, "base64");
+    const result = await m.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }]}],
+      generationConfig: { responseModalities: ["image"] }
+    });
+
+    const parts = result?.response?.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p: any) => p.inlineData?.data);
+    if (!imagePart) throw new Error("No image part (inlineData) in response");
+    return Buffer.from(imagePart.inlineData.data, "base64");
   };
 
   try {
     return await run(model);
-  } catch (e: any) {
-    // Fallback auf Preview-Modell (häufig nötig)
-    model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image-preview" });
+  } catch (e) {
+    // optionaler Fallback, falls deine Region bereits ohne -preview freigeschaltet ist
+    model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image" });
     return await run(model);
   }
 }
+
 
 
   /**
