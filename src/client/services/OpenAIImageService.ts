@@ -262,17 +262,12 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
     try {
       logger.info(`🔄 Calling Google Imagen 3 API...`);
       
-      const result = await this.model.generateContent({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: prompt
-          }]
-        }],
-        generationConfig: {
-          responseModalities: ["image"],
-        }
-      });
+      const result = await this.model.generateImage({
+          prompt,
+          size: "1024x1024", // optional
+          n: 1               // optional
+        });
+
 
       if (!result || !result.response) {
         throw new Error('No response from Imagen 3');
