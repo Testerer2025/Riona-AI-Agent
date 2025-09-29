@@ -24,23 +24,23 @@ export class OpenAIImageService {
     const apiKey = geminiApiKeys[this.currentApiKeyIndex];
     this.googleAI = new GoogleGenerativeAI(apiKey);
     this.model = this.googleAI.getGenerativeModel({ 
-      model: "imagen-3.0-generate-001" 
+      model: "gemini-2.5-flash-image" 
     });
     
-    logger.info("🎨 Google Imagen 3 Service initialized");
+    logger.info("🎨 Google Gemini 2.5 Flash Image Service initialized");
   }
 
   /**
-   * Generate image using Imagen 3
+   * Generate image using Gemini 2.5 Flash Image
    */
   public async generateImage(request: OpenAIImageRequest): Promise<string> {
     try {
-      logger.info(`🎨 Generating Imagen 3 image for: "${request.prompt}"`);
+      logger.info(`🎨 Generating Gemini 2.5 Flash Image for: "${request.prompt}"`);
       
       // Optimize prompt for business/professional content
       const optimizedPrompt = this.optimizePrompt(request.prompt, request.category);
-      
-      // Call Google Imagen 3 API
+
+      // Call Google Gemini 2.5 Flash Image API
       const imageData = await this.callImagenAPI(optimizedPrompt);
       
       // Save image
