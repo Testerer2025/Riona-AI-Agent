@@ -35,22 +35,22 @@ export class OpenAIImageService {
    */
   public async generateImage(request: OpenAIImageRequest): Promise<string> {
     try {
-      logger.info(`🎨 Generating Gemini 2.5 Flash Image for: "${request.prompt}"`);
+      logger.info(`🎨 Generating Gemini 2.5 Flash image for: "${request.prompt}"`);
       
       // Optimize prompt for business/professional content
       const optimizedPrompt = this.optimizePrompt(request.prompt, request.category);
-
+      
       // Call Google Gemini 2.5 Flash Image API
       const imageData = await this.callGeminiImageAPI(optimizedPrompt);
       
       // Save image
       const imagePath = await this.saveImage(imageData, request.category, request.filename);
       
-      logger.info(`✅ Imagen 3 image generated and saved: ${path.basename(imagePath)}`);
+      logger.info(`✅ Gemini Flash image generated and saved: ${path.basename(imagePath)}`);
       return imagePath;
       
     } catch (error) {
-      logger.error("❌ Imagen 3 image generation failed:", error);
+      logger.error("❌ Gemini Flash image generation failed:", error);
       throw error;
     }
   }
@@ -64,7 +64,7 @@ export class OpenAIImageService {
       return await this.generateImage({
         prompt,
         category,
-        filename: `imagen3_${Date.now()}`
+        filename: `gemini_flash_${Date.now()}`
       });
     } catch (error) {
       logger.error("❌ Content-based generation failed, trying simple prompt...");
@@ -169,19 +169,20 @@ export class OpenAIImageService {
             return replicateImage;
             
           } catch (replicateError) {
-            logger.error("❌ Replicate failed, falling back to Imagen 3:", replicateError);
-            // Fall through to Imagen 3
+            logger.error("❌ Replicate failed, falling back to Gemini Flash:", replicateError);
+            // Fall through to Gemini Flash
           }
         } else {
           logger.warn(`⚠️ Reference image not found: ${refImagePath}`);
         }
       }
       
-      // Default to Imagen 3 generation (no reference images or Replicate failed)
-      logger.info(`🎨 Using Imagen 3 (no reference images or fallback)`);
+      // Default to Gemini Flash generation (no reference images or Replicate failed)
+      logger.info(`🎨 Using Gemini Flash (no reference images or fallback)`);
       
       const imagePrompt = this.createThemeImagePrompt(theme, postContent);
       
+      // HIER WAR DER FEHLER - jetzt ruft es die richtige Methode auf!
       const imageData = await this.callGeminiImageAPI(imagePrompt);
       
       const filename = `${theme.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -250,86 +251,55 @@ Context: ${category} environment
 
 Style: ultra realistic, 35mm lens, shallow depth of field, professional stock photography`;
     
-    logger.info(`🎨 Imagen 3 prompt length: ${basePrompt.length} chars`);
+    logger.info(`🎨 Gemini Flash prompt length: ${basePrompt.length} chars`);
     
     return basePrompt;
   }
 
   /**
-   * Call Google Imagen 3 API
+   * Call Gemini 2.5 Flash Image API
    */
-  private async callImagenAPI(prompt: string): Promise<Buffer> {
+  private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
     try {
-      logger.info(`🔄 Calling Google Imagen 3 API...`);
+      logger.info(`🔄 Calling Gemini 2.5 Flash Image API...`);
       
       const result = await this.model.generateContent({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: prompt
-          }]
+        contents: [{ 
+          role: "user", 
+          parts: [{ text: prompt }]
         }],
-        generationConfig: {
-          responseModalities: ["image"],
-        }
+        generationConfig: { 
+          responseModalities: ["image"] 
+        },
       });
 
       if (!result || !result.response) {
-        throw new Error('No response from Imagen 3');
+        throw new Error('No response from Gemini Flash');
       }
 
-      const response = result.response;
+      const parts = result.response.candidates?.[0]?.content?.parts ?? [];
+      const imagePart = parts.find((p: any) => p.inlineData?.data);
       
-      // Extract image data from response
-      if (!response.candidates || response.candidates.length === 0) {
-        throw new Error('No image candidates in response');
+      if (!imagePart || !imagePart.inlineData?.data) {
+        throw new Error("No image part (inlineData) in response");
       }
 
-      const candidate = response.candidates[0];
-      if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-        throw new Error('No content parts in candidate');
-      }
-
-      const imagePart = candidate.content.parts.find((part: any) => part.inlineData);
-      if (!imagePart || !imagePart.inlineData || !imagePart.inlineData.data) {
-        throw new Error('No image data found in response');
-      }
-
-      // Convert base64 to Buffer
-      const base64Data = imagePart.inlineData.data;
-      const buffer = Buffer.from(base64Data, 'base64');
+      const buffer = Buffer.from(imagePart.inlineData.data, "base64");
+      logger.info("✅ Gemini Flash image data received");
       
-      logger.info("✅ Imagen 3 image data received");
       return buffer;
-
     } catch (error) {
-      logger.error("❌ Imagen 3 API call failed:", error);
+      logger.error("❌ Gemini Flash API call failed:", error);
       throw error;
     }
   }
-
-private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
-  const result = await this.model.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }]}],
-    generationConfig: { responseModalities: ["image"] },
-  });
-
-  const parts = result?.response?.candidates?.[0]?.content?.parts ?? [];
-  const imagePart = parts.find((p: any) => p.inlineData?.data);
-  if (!imagePart) throw new Error("No image part (inlineData) in response");
-
-  return Buffer.from(imagePart.inlineData.data, "base64");
-}
-
-
-
 
   /**
    * Save image buffer to file system
    */
   private async saveImage(imageBuffer: Buffer, category: string, filename?: string): Promise<string> {
     try {
-      logger.info("💾 Saving Imagen 3 image...");
+      logger.info("💾 Saving Gemini Flash image...");
       
       // Create category directory if it doesn't exist
       const categoryDir = path.resolve('assets', category);
@@ -340,7 +310,7 @@ private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
       // Generate filename if not provided
       const imageFilename = filename 
         ? `${filename}.png`
-        : `imagen3_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.png`;
+        : `gemini_flash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.png`;
       
       const imagePath = path.join(categoryDir, imageFilename);
       
@@ -419,23 +389,23 @@ private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
   }
 
   /**
-   * Test Imagen 3 generation
+   * Test Gemini Flash generation
    */
   public async testGeneration(): Promise<string> {
     try {
-      logger.info("🧪 Testing Imagen 3 generation...");
+      logger.info("🧪 Testing Gemini Flash generation...");
       
       const testImage = await this.generateImage({
         prompt: "professional business meeting",
         category: "test",
-        filename: `imagen3_test_${Date.now()}`
+        filename: `gemini_flash_test_${Date.now()}`
       });
       
-      logger.info(`✅ Imagen 3 test successful: ${testImage}`);
+      logger.info(`✅ Gemini Flash test successful: ${testImage}`);
       return testImage;
       
     } catch (error) {
-      logger.error("❌ Imagen 3 test failed:", error);
+      logger.error("❌ Gemini Flash test failed:", error);
       throw error;
     }
   }
@@ -446,8 +416,8 @@ private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
   public getApiInfo(): { provider: string; model: string; costPerImage: string } {
     return {
       provider: "Google",
-      model: "Imagen 3",
-      costPerImage: "Variable pricing"
+      model: "Gemini 2.5 Flash Image",
+      costPerImage: "Free (experimental)"
     };
   }
 }
