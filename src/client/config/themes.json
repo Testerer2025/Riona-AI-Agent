@@ -22,7 +22,7 @@
       "weight": 1,
       "promptFile": "bar_showcase_people.txt",
       "image": {
-        "prompt": "Eine Bar mit schweizer Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
+        "prompt": "Eine Bar mit Personen am Dartspielen. Eine typische Bar-Atmosphäre. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
         "apiStyle": "natural",
         "details": "Gläser, Dartscheiben, Cocktails, warme Beleuchtung",
         "size": "1024x1024",
@@ -37,7 +37,7 @@
       "weight": 1,
       "promptFile": "terrace_post.txt",
       "image": {
-        "prompt": "Schweizer Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
+        "prompt": "Personen entspannen auf einer schönen, sonnigen Bar-Terrasse mit Drinks. Auf dem von dir generierten Bild dürfen auf gar keinen Fall dürfen Schriften oder Text in irgendeiner Form sichtbar sein.",
         "apiStyle": "natural",
         "details": "Sonnenschein, Pflanzen, entspannte Atmosphäre, Drinks auf Tischen, lächelnde Menschen.",
         "size": "1024x1024",
