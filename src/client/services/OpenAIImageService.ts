@@ -262,6 +262,7 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
   private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
     try {
       logger.info(`🔄 Calling Gemini 2.5 Flash Image API...`);
+      logger.info(`📝 FULL PROMPT (${prompt.length} chars): ${prompt}`);
       
       const result = await this.model.generateContent({
         contents: [{ 
@@ -277,15 +278,47 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
         throw new Error('No response from Gemini Flash');
       }
 
+      // Log the full response structure for debugging
+      const candidates = result.response.candidates;
+      logger.info(`📊 Response candidates: ${candidates?.length || 0}`);
+      
+      if (candidates && candidates.length > 0) {
+        const firstCandidate = candidates[0];
+        logger.info(`📊 Candidate finishReason: ${firstCandidate.finishReason}`);
+        logger.info(`📊 Candidate parts: ${firstCandidate.content?.parts?.length || 0}`);
+        
+        // Check for safety ratings or blocks
+        if (firstCandidate.finishReason === 'SAFETY') {
+          logger.error(`🚫 Content blocked by safety filters`);
+          logger.error(`Safety ratings:`, firstCandidate.safetyRatings);
+        }
+        
+        // Log what parts we got
+        const parts = firstCandidate.content?.parts ?? [];
+        parts.forEach((part: any, index: number) => {
+          if (part.text) {
+            logger.info(`📝 Part ${index}: TEXT - "${part.text.substring(0, 100)}..."`);
+          }
+          if (part.inlineData) {
+            logger.info(`🖼️ Part ${index}: IMAGE - ${part.inlineData.mimeType}`);
+          }
+        });
+      }
+
       const parts = result.response.candidates?.[0]?.content?.parts ?? [];
       const imagePart = parts.find((p: any) => p.inlineData?.data);
       
       if (!imagePart || !imagePart.inlineData?.data) {
-        throw new Error("No image part (inlineData) in response");
+        // Try to get text response for debugging
+        const textPart = parts.find((p: any) => p.text);
+        if (textPart) {
+          logger.error(`❌ Got text instead of image: "${textPart.text}"`);
+        }
+        throw new Error("No image part (inlineData) in response - check logs for details");
       }
 
       const buffer = Buffer.from(imagePart.inlineData.data, "base64");
-      logger.info("✅ Gemini Flash image data received");
+      logger.info(`✅ Gemini Flash image data received (${buffer.length} bytes)`);
       
       return buffer;
     } catch (error) {
