@@ -309,29 +309,18 @@ Style: ultra realistic, 35mm lens, shallow depth of field, professional stock ph
   }
 
 private async callGeminiImageAPI(prompt: string): Promise<Buffer> {
-  // primär das Preview-Modell verwenden
-  let model = this.model;
+  const result = await this.model.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }]}],
+    generationConfig: { responseModalities: ["image"] },
+  });
 
-  const run = async (m: any) => {
-    const result = await m.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }]}],
-      generationConfig: { responseModalities: ["image"] }
-    });
+  const parts = result?.response?.candidates?.[0]?.content?.parts ?? [];
+  const imagePart = parts.find((p: any) => p.inlineData?.data);
+  if (!imagePart) throw new Error("No image part (inlineData) in response");
 
-    const parts = result?.response?.candidates?.[0]?.content?.parts ?? [];
-    const imagePart = parts.find((p: any) => p.inlineData?.data);
-    if (!imagePart) throw new Error("No image part (inlineData) in response");
-    return Buffer.from(imagePart.inlineData.data, "base64");
-  };
-
-  try {
-    return await run(model);
-  } catch (e) {
-    // optionaler Fallback, falls deine Region bereits ohne -preview freigeschaltet ist
-    model = this.googleAI.getGenerativeModel({ model: "gemini-2.5-flash-image" });
-    return await run(model);
-  }
+  return Buffer.from(imagePart.inlineData.data, "base64");
 }
+
 
 
 
